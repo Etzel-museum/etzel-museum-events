@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>אירועי מוזיאון האצ"ל</title>
+<style>
+  :root { --accent: #0e4d64; --accent-light: #1a7a9e; --bg: #f6f5f2; --card-bg: #fff; --text: #222; --muted: #666; --danger: #a4332c; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; margin: 0; background: var(--bg); color: var(--text); }
+  header { background: var(--accent); color: #fff; padding: 30px 20px; text-align: center; }
+  header h1 { margin: 0 0 6px 0; }
+  header p { margin: 0; opacity: 0.85; }
+  main { max-width: 720px; margin: 0 auto; padding: 24px 16px 60px; }
+  .event-card { background: var(--card-bg); border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); padding: 20px; margin-bottom: 24px; }
+  .event-card h2 { margin-top: 0; color: var(--accent); }
+  .event-desc { color: var(--muted); margin-bottom: 16px; white-space: pre-line; }
+  .session-row { border-top: 1px solid #eee; padding: 14px 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+  .session-info b { display: block; }
+  .session-info span { color: var(--muted); font-size: 0.9em; }
+  .spots-left { font-weight: bold; }
+  .spots-left.low { color: var(--danger); }
+  button { font-family: inherit; cursor: pointer; border: none; border-radius: 8px; padding: 10px 18px; font-size: 0.95em; }
+  .btn-primary { background: var(--accent-light); color: #fff; }
+  .btn-primary:hover { background: var(--accent); }
+  .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+  .reg-form { display: none; margin-top: 14px; padding-top: 14px; border-top: 1px dashed #ddd; width: 100%; }
+  .reg-form.open { display: block; }
+  .reg-form label { display: block; font-size: 0.9em; margin: 10px 0 4px; color: var(--muted); }
+  .reg-form input { width: 100%; padding: 9px; border: 1px solid #ccc; border-radius: 6px; font-size: 1em; }
+  .reg-form .actions { margin-top: 14px; display: flex; gap: 10px; }
+  .msg { margin-top: 10px; font-size: 0.9em; padding: 8px 10px; border-radius: 6px; }
+  .msg.error { background: #fdecea; color: var(--danger); }
+  .msg.success { background: #e8f5e9; color: #2e7d32; }
+  .empty-state { text-align: center; color: var(--muted); padding: 60px 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>אירועים במוזיאון האצ"ל</h1>
+  <p>הרשמה מראש למקומות מוגבלים</p>
+</header>
+
+<main id="eventsContainer">
+  <div class="empty-state">טוען אירועים...</div>
+</main>
+
+<script type="module">
+import { db } from './firebase-init.js';
+import {
+  collection, getDocs, doc, runTransaction, serverTimestamp, query, orderBy
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+const container = document.getElementById('eventsContainer');
+
+async function loadEvents() {
+  const eventsSnap = await getDocs(collection(db, 'events'));
+  const events = eventsSnap.docs.filter(d => d.data().active !== false);
+
+  if (events.length === 0) {
+    container.innerHTML = '<div class="empty-state">אין כרגע אירועים פתוחים להרשמה.</div>';
+    return;
+  }
+
+  container.innerHTML = '';
+  for (const eventDoc of events) {
+    const event = eventDoc.data();
+    const card = document.createElement('div');
+    card.className = 'event-card';
+
+    const sessionsSnap = await getDocs(query(collection(db, 'events', eventDoc.id, 'sessions'), orderBy('date'), orderBy('time')));
+
+    let sessionsHtml = '';
+    sessionsSnap.forEach(sDoc => {
+      const s = sDoc.data();
+      const spotsLeft = s.capacity - (s.registeredCount || 0);
+      sessionsHtml += renderSession(eventDoc.id, sDoc.id, s, spotsLeft);
+    });
+
+    if (!sessionsHtml) {
+      sessionsHtml = '<p class="empty-state" style="padding:20px 0;">אין סבבים פתוחים לאירוע זה כרגע.</p>';
+    }
+
+    card.innerHTML = `
+      <h2>${escapeHtml(event.title || '')}</h2>
+      <div class="event-desc">${escapeHtml(event.description || '')}</div>
+      ${sessionsHtml}
+    `;
+    container.appendChild(card);
+  }
+
+  attachHandlers();
+}
+
+function renderSession(eventId, sessionId, s, spotsLeft) {
+  const full = spotsLeft <= 0;
+  return `
+    <div class="session-row" data-event="${eventId}" data-session="${sessionId}">
+      <div class="session-info">
+        <b>${escapeHtml(s.date)} · ${escapeHtml(s.time)}</b>
+        <span class="spots-left ${spotsLeft <= 3 ? 'low' : ''}">${full ? 'אין מקומות פנויים' : spotsLeft + ' מקומות פנויים'}</span>
+      </div>
+      <button class="btn-primary btn-toggle-form" ${full ? 'disabled' : ''}>${full ? 'מלא' : 'הירשם'}</button>
+      <form class="reg-form">
+        <label>שם מלא</label>
+        <input type="text" name="name" required>
+        <label>טלפון</label>
+        <input type="tel" name="phone" required>
+        <label>מספר אנשים</label>
+        <input type="number" name="partySize" min="1" value="1" required>
+        <div class="actions">
+          <button type="submit" class="btn-primary">שלח הרשמה</button>
+        </div>
+        <div class="msg" style="display:none;"></div>
+      </form>
+    </div>
+  `;
+}
+
+function attachHandlers() {
+  container.querySelectorAll('.btn-toggle-form').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const form = btn.parentElement.querySelector('.reg-form');
+      form.classList.toggle('open');
+    });
+  });
+
+  container.querySelectorAll('.reg-form').forEach(form => {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const row = form.closest('.session-row');
+      const eventId = row.dataset.event;
+      const sessionId = row.dataset.session;
+      const msg = form.querySelector('.msg');
+      const submitBtn = form.querySelector('button[type="submit"]');
+      const name = form.name.value.trim();
+      const phone = form.phone.value.trim();
+      const partySize = parseInt(form.partySize.value, 10);
+
+      submitBtn.disabled = true;
+      msg.style.display = 'none';
+
+      try {
+        await registerForSession(eventId, sessionId, { name, phone, partySize });
+        msg.className = 'msg success';
+        msg.textContent = 'ההרשמה נקלטה בהצלחה!';
+        msg.style.display = 'block';
+        form.reset();
+        await loadEvents();
+      } catch (err) {
+        msg.className = 'msg error';
+        msg.textContent = err.message || 'שגיאה בהרשמה, נסו שוב.';
+        msg.style.display = 'block';
+        submitBtn.disabled = false;
+      }
+    });
+  });
+}
+
+async function registerForSession(eventId, sessionId, { name, phone, partySize }) {
+  const sessionRef = doc(db, 'events', eventId, 'sessions', sessionId);
+  const regRef = doc(collection(db, 'events', eventId, 'sessions', sessionId, 'registrations'));
+
+  await runTransaction(db, async (tx) => {
+    const sessionSnap = await tx.get(sessionRef);
+    if (!sessionSnap.exists()) throw new Error('הסבב לא נמצא.');
+    const data = sessionSnap.data();
+    const newCount = (data.registeredCount || 0) + partySize;
+    if (newCount > data.capacity) {
+      throw new Error('אין מספיק מקומות פנויים לכמות המבוקשת.');
+    }
+    tx.update(sessionRef, { registeredCount: newCount });
+    tx.set(regRef, { name, phone, partySize, createdAt: serverTimestamp() });
+  });
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+loadEvents().catch(err => {
+  container.innerHTML = '<div class="empty-state">שגיאה בטעינת האירועים.</div>';
+  console.error(err);
+});
+</script>
+
+</body>
+</html>

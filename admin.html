@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>ניהול אירועים - מוזיאון האצ"ל</title>
+<style>
+  :root { --accent: #0e4d64; --accent-light: #1a7a9e; --bg: #f6f5f2; --card-bg: #fff; --text: #222; --muted: #666; --danger: #a4332c; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; margin: 0; background: var(--bg); color: var(--text); }
+  header { background: var(--accent); color: #fff; padding: 20px; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { margin: 0; font-size: 1.3em; }
+  main { max-width: 900px; margin: 0 auto; padding: 24px 16px 60px; }
+  .card { background: var(--card-bg); border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); padding: 20px; margin-bottom: 24px; }
+  .card h2 { margin-top: 0; color: var(--accent); }
+  label { display: block; font-size: 0.9em; margin: 10px 0 4px; color: var(--muted); }
+  input[type=text], input[type=tel], input[type=number], input[type=date], input[type=time], input[type=email], input[type=password], textarea {
+    width: 100%; padding: 9px; border: 1px solid #ccc; border-radius: 6px; font-size: 1em; font-family: inherit;
+  }
+  button { font-family: inherit; cursor: pointer; border: none; border-radius: 8px; padding: 9px 16px; font-size: 0.95em; }
+  .btn-primary { background: var(--accent-light); color: #fff; }
+  .btn-primary:hover { background: var(--accent); }
+  .btn-danger { background: #fdecea; color: var(--danger); }
+  .btn-secondary { background: #eee; color: #333; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .row > * { flex: 1; min-width: 140px; }
+  .actions { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .session-item { border-top: 1px solid #eee; padding: 14px 0; }
+  .session-item .top { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+  .badge { background: #eef4f6; color: var(--accent); padding: 3px 10px; border-radius: 20px; font-size: 0.85em; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.9em; }
+  th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid #eee; }
+  .msg { margin-top: 10px; font-size: 0.9em; padding: 8px 10px; border-radius: 6px; }
+  .msg.error { background: #fdecea; color: var(--danger); }
+  .msg.success { background: #e8f5e9; color: #2e7d32; }
+  #loginScreen { max-width: 360px; margin: 80px auto; }
+  .hidden { display: none !important; }
+  .muted { color: var(--muted); font-size: 0.9em; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ניהול אירועים</h1>
+  <button id="signOutBtn" class="btn-secondary hidden">התנתק</button>
+</header>
+
+<main>
+  <div id="loginScreen" class="card">
+    <h2>התחברות</h2>
+    <form id="loginForm">
+      <label>אימייל</label>
+      <input type="email" id="loginEmail" required>
+      <label>סיסמה</label>
+      <input type="password" id="loginPassword" required>
+      <div class="actions"><button type="submit" class="btn-primary">התחבר</button></div>
+      <div class="msg error hidden" id="loginMsg"></div>
+    </form>
+    <p class="muted">משתמש אדמין נוצר ידנית ב-Firebase Console (Authentication → Users → Add user).</p>
+  </div>
+
+  <div id="dashboard" class="hidden">
+    <div class="card">
+      <h2>אירוע חדש</h2>
+      <form id="newEventForm">
+        <label>כותרת</label>
+        <input type="text" id="newEventTitle" required>
+        <label>תיאור</label>
+        <textarea id="newEventDesc" rows="3"></textarea>
+        <div class="actions"><button type="submit" class="btn-primary">צור אירוע</button></div>
+      </form>
+    </div>
+
+    <div id="eventsList"></div>
+  </div>
+</main>
+
+<script type="module">
+import { auth, db } from './firebase-init.js';
+import {
+  onAuthStateChanged, signInWithEmailAndPassword, signOut
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+import {
+  collection, getDocs, addDoc, deleteDoc, doc, query, orderBy, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+const loginScreen = document.getElementById('loginScreen');
+const dashboard = document.getElementById('dashboard');
+const signOutBtn = document.getElementById('signOutBtn');
+
+onAuthStateChanged(auth, user => {
+  if (user) {
+    loginScreen.classList.add('hidden');
+    dashboard.classList.remove('hidden');
+    signOutBtn.classList.remove('hidden');
+    loadEvents();
+  } else {
+    loginScreen.classList.remove('hidden');
+    dashboard.classList.add('hidden');
+    signOutBtn.classList.add('hidden');
+  }
+});
+
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const msg = document.getElementById('loginMsg');
+  try {
+    await signInWithEmailAndPassword(auth, email, password);
+    msg.classList.add('hidden');
+  } catch (err) {
+    msg.textContent = 'התחברות נכשלה: ' + err.message;
+    msg.classList.remove('hidden');
+  }
+});
+
+signOutBtn.addEventListener('click', () => signOut(auth));
+
+document.getElementById('newEventForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const title = document.getElementById('newEventTitle').value.trim();
+  const description = document.getElementById('newEventDesc').value.trim();
+  if (!title) return;
+  await addDoc(collection(db, 'events'), { title, description, active: true, createdAt: serverTimestamp() });
+  document.getElementById('newEventForm').reset();
+  loadEvents();
+});
+
+async function loadEvents() {
+  const list = document.getElementById('eventsList');
+  const eventsSnap = await getDocs(query(collection(db, 'events'), orderBy('createdAt', 'desc')));
+  list.innerHTML = '';
+
+  for (const eventDoc of eventsSnap.docs) {
+    const event = eventDoc.data();
+    const eventId = eventDoc.id;
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const sessionsSnap = await getDocs(query(collection(db, 'events', eventId, 'sessions'), orderBy('date'), orderBy('time')));
+    let sessionsHtml = '';
+    sessionsSnap.forEach(sDoc => {
+      const s = sDoc.data();
+      sessionsHtml += renderSessionItem(eventId, sDoc.id, s);
+    });
+
+    card.innerHTML = `
+      <h2>${escapeHtml(event.title)}</h2>
+      <p class="muted">${escapeHtml(event.description || '')}</p>
+      <div class="actions">
+        <button class="btn-danger btn-delete-event" data-event="${eventId}">מחק אירוע</button>
+      </div>
+
+      <hr style="margin:20px 0; border:0; border-top:1px solid #eee;">
+      <h3>סבבים</h3>
+      <div class="sessions-container">${sessionsHtml || '<p class="muted">אין סבבים עדיין.</p>'}</div>
+
+      <form class="new-session-form" data-event="${eventId}" style="margin-top:16px;">
+        <div class="row">
+          <div><label>תאריך</label><input type="date" name="date" required></div>
+          <div><label>שעה</label><input type="time" name="time" required></div>
+          <div><label>קיבולת</label><input type="number" name="capacity" min="1" value="20" required></div>
+        </div>
+        <div class="actions"><button type="submit" class="btn-primary">הוסף סבב</button></div>
+      </form>
+    `;
+    list.appendChild(card);
+  }
+
+  attachEventHandlers();
+}
+
+function renderSessionItem(eventId, sessionId, s) {
+  return `
+    <div class="session-item" data-event="${eventId}" data-session="${sessionId}">
+      <div class="top">
+        <div><b>${escapeHtml(s.date)} · ${escapeHtml(s.time)}</b> <span class="badge">${s.registeredCount || 0}/${s.capacity}</span></div>
+        <div class="actions" style="margin-top:0;">
+          <button class="btn-secondary btn-show-regs">הצג נרשמים</button>
+          <button class="btn-danger btn-delete-session">מחק סבב</button>
+        </div>
+      </div>
+      <div class="regs-container"></div>
+    </div>
+  `;
+}
+
+function attachEventHandlers() {
+  document.querySelectorAll('.btn-delete-event').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('למחוק את האירוע? פעולה זו לא הופכת.')) return;
+      await deleteDoc(doc(db, 'events', btn.dataset.event));
+      loadEvents();
+    });
+  });
+
+  document.querySelectorAll('.new-session-form').forEach(form => {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const eventId = form.dataset.event;
+      const date = form.date.value;
+      const time = form.time.value;
+      const capacity = parseInt(form.capacity.value, 10);
+      await addDoc(collection(db, 'events', eventId, 'sessions'), { date, time, capacity, registeredCount: 0 });
+      loadEvents();
+    });
+  });
+
+  document.querySelectorAll('.btn-delete-session').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const item = btn.closest('.session-item');
+      if (!confirm('למחוק את הסבב? כל ההרשמות אליו יימחקו גם הן.')) return;
+      const regsSnap = await getDocs(collection(db, 'events', item.dataset.event, 'sessions', item.dataset.session, 'registrations'));
+      await Promise.all(regsSnap.docs.map(r => deleteDoc(r.ref)));
+      await deleteDoc(doc(db, 'events', item.dataset.event, 'sessions', item.dataset.session));
+      loadEvents();
+    });
+  });
+
+  document.querySelectorAll('.btn-show-regs').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const item = btn.closest('.session-item');
+      const regsContainer = item.querySelector('.regs-container');
+      if (regsContainer.dataset.loaded === '1') {
+        regsContainer.innerHTML = '';
+        regsContainer.dataset.loaded = '0';
+        return;
+      }
+      const regsSnap = await getDocs(collection(db, 'events', item.dataset.event, 'sessions', item.dataset.session, 'registrations'));
+      const regs = regsSnap.docs.map(d => d.data());
+      if (regs.length === 0) {
+        regsContainer.innerHTML = '<p class="muted">אין נרשמים עדיין.</p>';
+      } else {
+        let rows = regs.map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.phone)}</td><td>${r.partySize}</td></tr>`).join('');
+        regsContainer.innerHTML = `
+          <table>
+            <thead><tr><th>שם</th><th>טלפון</th><th>כמות</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <button class="btn-secondary btn-export-csv" style="margin-top:10px;">ייצוא CSV</button>
+        `;
+        regsContainer.querySelector('.btn-export-csv').addEventListener('click', () => exportCsv(regs));
+      }
+      regsContainer.dataset.loaded = '1';
+    });
+  });
+}
+
+function exportCsv(regs) {
+  const header = 'שם,טלפון,כמות\n';
+  const rows = regs.map(r => `"${r.name.replace(/"/g, '""')}","${r.phone.replace(/"/g, '""')}",${r.partySize}`).join('\n');
+  const csv = '﻿' + header + rows;
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'נרשמים.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str || '';
+  return div.innerHTML;
+}
+</script>
+
+</body>
+</html>
