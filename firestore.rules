@@ -35,9 +35,11 @@ service cloud.firestore {
         }
 
         match /waitlist/{waitlistId} {
-          // Same doc-ID-as-key model as registrations, but only the admin can
-          // ever list/view/remove waitlist entries (no public self-service here).
-          allow get, list, update, delete: if request.auth != null;
+          // "get" (by exact ID, same hash-of-name+phone model as registrations)
+          // is needed so the join form can check for an existing entry before
+          // writing. "list" stays admin-only, so no one can browse the queue.
+          allow get: if true;
+          allow list, update, delete: if request.auth != null;
           allow create: if request.resource.data.keys().hasOnly(['name', 'phone', 'email', 'phone2', 'partySize', 'createdAt']) &&
                           request.resource.data.name is string && request.resource.data.name.size() > 0 &&
                           request.resource.data.phone is string && request.resource.data.phone.size() > 0 &&

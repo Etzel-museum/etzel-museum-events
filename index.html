@@ -28,13 +28,18 @@
 
   main { max-width: 760px; margin: 0 auto; padding: 32px 16px 60px; }
 
-  .event-card { background: var(--card-bg); border-radius: 14px; box-shadow: 0 4px 18px rgba(14,27,46,0.12); overflow: hidden; margin-bottom: 30px; }
+  @keyframes fadeInUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+  .event-card { background: var(--card-bg); border-radius: 14px; box-shadow: 0 4px 18px rgba(14,27,46,0.12); overflow: hidden; margin-bottom: 30px; animation: fadeInUp 0.5s ease-out backwards; }
   .event-image { width: 100%; max-height: 340px; object-fit: contain; display: block; background: #e5ded0; }
   .event-body { padding: 22px 24px 24px; }
   .event-card h2 { margin: 0 0 8px; color: var(--etzel-blue); font-size: 1.4em; }
   .event-desc { color: var(--muted); margin-bottom: 18px; white-space: pre-line; line-height: 1.5; }
 
-  .session-row { border-top: 1px solid #eee; padding: 16px 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+  .session-row {
+    background: #faf8f3; border-radius: 10px; padding: 16px 18px; margin-top: 14px;
+    border-inline-start: 3px solid var(--etzel-gold);
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
+  }
   .session-info b { display: block; color: var(--etzel-blue); font-size: 1.05em; }
   .session-info span { color: var(--muted); font-size: 0.9em; }
   .spots-left { font-weight: bold; color: var(--etzel-gold); }
@@ -50,7 +55,7 @@
   .reg-form label, .cancel-form label { display: block; font-size: 0.9em; margin: 10px 0 4px; color: var(--muted); }
   .reg-form input, .cancel-form input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 1em; font-family: inherit; }
   .reg-form input:focus, .cancel-form input:focus { outline: none; border-color: var(--etzel-gold); }
-  .reg-form .actions, .cancel-form .actions { margin-top: 14px; display: flex; gap: 10px; }
+  .reg-form .actions, .cancel-form .actions, .waitlist-form .actions { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 10px; }
 
   .btn-link { background: none; color: var(--muted); text-decoration: underline; padding: 6px 4px; font-size: 0.85em; border-radius: 0; }
   .btn-link:hover { color: var(--etzel-blue); }
@@ -148,10 +153,12 @@ async function loadEvents() {
   upcoming.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
 
   container.innerHTML = '';
+  let cardIndex = 0;
   for (const { id, event, futureSessions } of upcoming) {
     const card = document.createElement('div');
     card.className = 'event-card';
     card.id = `event-${id}`;
+    card.style.animationDelay = `${Math.min(cardIndex++, 5) * 0.08}s`;
 
     let sessionsHtml = futureSessions.map(s => {
       const spotsLeft = s.capacity - (s.registeredCount || 0);

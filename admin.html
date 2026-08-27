@@ -29,7 +29,8 @@
   .session-item { border-top: 1px solid #eee; padding: 14px 0; }
   .session-item .top { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
   .badge { background: #eef4f6; color: var(--accent); padding: 3px 10px; border-radius: 20px; font-size: 0.85em; }
-  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.9em; }
+  .regs-container, .waitlist-container { overflow-x: auto; }
+  table { width: 100%; min-width: 480px; border-collapse: collapse; margin-top: 12px; font-size: 0.9em; }
   th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid #eee; }
   .msg { margin-top: 10px; font-size: 0.9em; padding: 8px 10px; border-radius: 6px; }
   .msg.error { background: #fdecea; color: var(--danger); }
