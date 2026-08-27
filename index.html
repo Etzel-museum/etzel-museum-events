@@ -127,7 +127,7 @@ function renderSession(eventId, sessionId, s, spotsLeft) {
   return `
     <div class="session-row" data-event="${eventId}" data-session="${sessionId}">
       <div class="session-info">
-        <b>${escapeHtml(s.date)} · ${escapeHtml(s.time)}</b>
+        <b><bdi dir="ltr">${formatDate(s.date)} · ${escapeHtml(s.time)}</bdi></b>
         <span class="spots-left ${spotsLeft <= 3 ? 'low' : ''}">${full ? 'אין מקומות פנויים' : spotsLeft + ' מקומות פנויים'}</span>
       </div>
       <button class="btn-primary btn-toggle-form" ${full ? 'disabled' : ''}>${full ? 'מלא' : 'הירשם'}</button>
@@ -208,6 +208,12 @@ async function registerForSession(eventId, sessionId, { name, phone, email, phon
     tx.update(sessionRef, { registeredCount: newCount });
     tx.set(regRef, { name, phone, email: email || '', phone2: phone2 || '', partySize, createdAt: serverTimestamp() });
   });
+}
+
+function formatDate(dateStr) {
+  const [y, m, d] = (dateStr || '').split('-');
+  if (!y || !m || !d) return escapeHtml(dateStr || '');
+  return `${d}/${m}/${y}`;
 }
 
 function escapeHtml(str) {

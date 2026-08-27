@@ -223,7 +223,7 @@ function renderSessionItem(eventId, sessionId, s) {
   return `
     <div class="session-item" data-event="${eventId}" data-session="${sessionId}">
       <div class="top">
-        <div><b>${escapeHtml(s.date)} · ${escapeHtml(s.time)}</b> <span class="badge">${s.registeredCount || 0}/${s.capacity}</span></div>
+        <div><b><bdi dir="ltr">${formatDate(s.date)} · ${escapeHtml(s.time)}</bdi></b> <span class="badge">${s.registeredCount || 0}/${s.capacity}</span></div>
         <div class="actions" style="margin-top:0;">
           <button class="btn-secondary btn-show-regs">הצג נרשמים</button>
           <button class="btn-danger btn-delete-session">מחק סבב</button>
@@ -307,6 +307,12 @@ function exportCsv(regs) {
   a.download = 'נרשמים.csv';
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function formatDate(dateStr) {
+  const [y, m, d] = (dateStr || '').split('-');
+  if (!y || !m || !d) return escapeHtml(dateStr || '');
+  return `${d}/${m}/${y}`;
 }
 
 function escapeHtml(str) {
