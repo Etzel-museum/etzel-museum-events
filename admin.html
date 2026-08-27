@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 <title>ניהול אירועים - מוזיאון האצ"ל</title>
 <style>
-  :root { --accent: #0e4d64; --accent-light: #1a7a9e; --bg: #f6f5f2; --card-bg: #fff; --text: #222; --muted: #666; --danger: #a4332c; }
+  :root { --accent: #0e1b2e; --accent-light: #b8874e; --bg: #f6f5f2; --card-bg: #fff; --text: #222; --muted: #666; --danger: #a4332c; }
   * { box-sizing: border-box; }
   body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; margin: 0; background: var(--bg); color: var(--text); }
   header { background: var(--accent); color: #fff; padding: 20px; display: flex; align-items: center; justify-content: space-between; }
@@ -68,7 +68,12 @@
         <input type="text" id="newEventTitle" required>
         <label>תיאור</label>
         <textarea id="newEventDesc" rows="3"></textarea>
-        <div class="actions"><button type="submit" class="btn-primary">צור אירוע</button></div>
+        <label>תמונה (אופציונלי)</label>
+        <input type="file" id="newEventImage" accept="image/*">
+        <div class="actions">
+          <button type="submit" class="btn-primary" id="newEventSubmitBtn">צור אירוע</button>
+        </div>
+        <div class="msg error hidden" id="newEventMsg"></div>
       </form>
     </div>
 
@@ -118,14 +123,51 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
 
 signOutBtn.addEventListener('click', () => signOut(auth));
 
+const CLOUDINARY_CLOUD_NAME = 'qtdjlxjs';
+const CLOUDINARY_UPLOAD_PRESET = 'קלודקוד';
+
+async function uploadImage(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+    method: 'POST',
+    body: formData
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || 'העלאת התמונה נכשלה');
+  return data.secure_url;
+}
+
 document.getElementById('newEventForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const title = document.getElementById('newEventTitle').value.trim();
   const description = document.getElementById('newEventDesc').value.trim();
+  const imageFile = document.getElementById('newEventImage').files[0];
+  const submitBtn = document.getElementById('newEventSubmitBtn');
+  const msg = document.getElementById('newEventMsg');
   if (!title) return;
-  await addDoc(collection(db, 'events'), { title, description, active: true, createdAt: serverTimestamp() });
-  document.getElementById('newEventForm').reset();
-  loadEvents();
+
+  submitBtn.disabled = true;
+  msg.classList.add('hidden');
+  try {
+    let imageUrl = '';
+    if (imageFile) {
+      submitBtn.textContent = 'מעלה תמונה...';
+      imageUrl = await uploadImage(imageFile);
+    }
+    const eventData = { title, description, active: true, createdAt: serverTimestamp() };
+    if (imageUrl) eventData.imageUrl = imageUrl;
+    await addDoc(collection(db, 'events'), eventData);
+    document.getElementById('newEventForm').reset();
+    loadEvents();
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.classList.remove('hidden');
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'צור אירוע';
+  }
 });
 
 async function loadEvents() {
@@ -146,7 +188,12 @@ async function loadEvents() {
       sessionsHtml += renderSessionItem(eventId, sDoc.id, s);
     });
 
+    const thumbHtml = event.imageUrl
+      ? `<img src="${escapeHtml(event.imageUrl)}" alt="" style="width:100%; max-width:260px; border-radius:8px; display:block; margin-bottom:12px;">`
+      : '';
+
     card.innerHTML = `
+      ${thumbHtml}
       <h2>${escapeHtml(event.title)}</h2>
       <p class="muted">${escapeHtml(event.description || '')}</p>
       <div class="actions">

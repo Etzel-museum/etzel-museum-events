@@ -5,46 +5,68 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>אירועי מוזיאון האצ"ל</title>
 <style>
-  :root { --accent: #0e4d64; --accent-light: #1a7a9e; --bg: #f6f5f2; --card-bg: #fff; --text: #222; --muted: #666; --danger: #a4332c; }
+  :root {
+    --etzel-blue: #0e1b2e; --etzel-gold: #b8874e;
+    --bg: #f4f1ec; --card-bg: #fff; --text: #222; --muted: #666; --danger: #a4332c;
+  }
   * { box-sizing: border-box; }
   body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; margin: 0; background: var(--bg); color: var(--text); }
-  header { background: var(--accent); color: #fff; padding: 30px 20px; text-align: center; }
-  header h1 { margin: 0 0 6px 0; }
-  header p { margin: 0; opacity: 0.85; }
-  main { max-width: 720px; margin: 0 auto; padding: 24px 16px 60px; }
-  .event-card { background: var(--card-bg); border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); padding: 20px; margin-bottom: 24px; }
-  .event-card h2 { margin-top: 0; color: var(--accent); }
-  .event-desc { color: var(--muted); margin-bottom: 16px; white-space: pre-line; }
-  .session-row { border-top: 1px solid #eee; padding: 14px 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
-  .session-info b { display: block; }
+
+  .hero {
+    position: relative; padding: 70px 20px 60px; text-align: center; color: #fff;
+    background: linear-gradient(rgba(14,27,46,0.82), rgba(14,27,46,0.9)), url('background.jpg');
+    background-size: cover; background-position: center;
+  }
+  .hero h1 { margin: 0 0 8px; font-size: 2em; letter-spacing: 0.5px; }
+  .hero p { margin: 0; color: #e7d6bd; font-size: 1.05em; }
+  .hero::after { content: ""; position: absolute; bottom: 0; right: 0; left: 0; height: 4px; background: var(--etzel-gold); }
+
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 60px; }
+
+  .event-card { background: var(--card-bg); border-radius: 14px; box-shadow: 0 4px 18px rgba(14,27,46,0.12); overflow: hidden; margin-bottom: 30px; }
+  .event-image { width: 100%; height: 220px; object-fit: cover; display: block; background: #e5e0d6; }
+  .event-body { padding: 22px 24px 24px; }
+  .event-card h2 { margin: 0 0 8px; color: var(--etzel-blue); font-size: 1.4em; }
+  .event-desc { color: var(--muted); margin-bottom: 18px; white-space: pre-line; line-height: 1.5; }
+
+  .session-row { border-top: 1px solid #eee; padding: 16px 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+  .session-info b { display: block; color: var(--etzel-blue); font-size: 1.05em; }
   .session-info span { color: var(--muted); font-size: 0.9em; }
-  .spots-left { font-weight: bold; }
+  .spots-left { font-weight: bold; color: var(--etzel-gold); }
   .spots-left.low { color: var(--danger); }
-  button { font-family: inherit; cursor: pointer; border: none; border-radius: 8px; padding: 10px 18px; font-size: 0.95em; }
-  .btn-primary { background: var(--accent-light); color: #fff; }
-  .btn-primary:hover { background: var(--accent); }
+
+  button { font-family: inherit; cursor: pointer; border: none; border-radius: 24px; padding: 10px 22px; font-size: 0.95em; transition: 0.15s; }
+  .btn-primary { background: var(--etzel-gold); color: #fff; font-weight: 600; }
+  .btn-primary:hover { background: var(--etzel-blue); }
   .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
-  .reg-form { display: none; margin-top: 14px; padding-top: 14px; border-top: 1px dashed #ddd; width: 100%; }
+
+  .reg-form { display: none; margin-top: 16px; padding-top: 16px; border-top: 1px dashed #ddd; width: 100%; }
   .reg-form.open { display: block; }
   .reg-form label { display: block; font-size: 0.9em; margin: 10px 0 4px; color: var(--muted); }
-  .reg-form input { width: 100%; padding: 9px; border: 1px solid #ccc; border-radius: 6px; font-size: 1em; }
+  .reg-form input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 1em; font-family: inherit; }
+  .reg-form input:focus { outline: none; border-color: var(--etzel-gold); }
   .reg-form .actions { margin-top: 14px; display: flex; gap: 10px; }
+
   .msg { margin-top: 10px; font-size: 0.9em; padding: 8px 10px; border-radius: 6px; }
   .msg.error { background: #fdecea; color: var(--danger); }
-  .msg.success { background: #e8f5e9; color: #2e7d32; }
+  .msg.success { background: #eaf3e3; color: #3f6b2c; }
+
   .empty-state { text-align: center; color: var(--muted); padding: 60px 20px; }
+  footer { text-align: center; color: var(--muted); font-size: 0.85em; padding: 20px; }
 </style>
 </head>
 <body>
 
-<header>
-  <h1>אירועים במוזיאון האצ"ל</h1>
-  <p>הרשמה מראש למקומות מוגבלים</p>
-</header>
+<div class="hero">
+  <h1>מוזיאון האצ"ל</h1>
+  <p>אירועים והרשמה מראש</p>
+</div>
 
 <main id="eventsContainer">
   <div class="empty-state">טוען אירועים...</div>
 </main>
+
+<footer>מוזיאון האצ"ל</footer>
 
 <script type="module">
 import { db } from './firebase-init.js';
@@ -82,10 +104,17 @@ async function loadEvents() {
       sessionsHtml = '<p class="empty-state" style="padding:20px 0;">אין סבבים פתוחים לאירוע זה כרגע.</p>';
     }
 
+    const imageHtml = event.imageUrl
+      ? `<img class="event-image" src="${escapeHtml(event.imageUrl)}" alt="${escapeHtml(event.title || '')}">`
+      : '';
+
     card.innerHTML = `
-      <h2>${escapeHtml(event.title || '')}</h2>
-      <div class="event-desc">${escapeHtml(event.description || '')}</div>
-      ${sessionsHtml}
+      ${imageHtml}
+      <div class="event-body">
+        <h2>${escapeHtml(event.title || '')}</h2>
+        <div class="event-desc">${escapeHtml(event.description || '')}</div>
+        ${sessionsHtml}
+      </div>
     `;
     container.appendChild(card);
   }
