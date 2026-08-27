@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>אירועי מוזיאון האצ"ל</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700&display=swap" rel="stylesheet">
 <style>
   :root {
     --etzel-blue: #0e1b2e; --etzel-gold: #b8874e;
@@ -11,6 +14,8 @@
   }
   * { box-sizing: border-box; }
   body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; margin: 0; background: var(--bg); color: var(--text); }
+  .hero h1, .event-card h2 { font-family: 'Frank Ruhl Libre', Georgia, serif; }
+  .icon { width: 16px; height: 16px; vertical-align: -3px; margin-inline-end: 5px; fill: currentColor; flex-shrink: 0; }
 
   .hero {
     position: relative; padding: 70px 20px 60px; text-align: center; color: #fff;
@@ -57,6 +62,32 @@
 
   .empty-state { text-align: center; color: var(--muted); padding: 60px 20px; }
   footer { text-align: center; color: var(--muted); font-size: 0.85em; padding: 20px; }
+
+  .skeleton-card { background: var(--card-bg); border-radius: 14px; overflow: hidden; margin-bottom: 30px; box-shadow: 0 4px 18px rgba(14,27,46,0.08); }
+  .skeleton-block { background: linear-gradient(90deg, #ece7dd 25%, #f6f3ec 50%, #ece7dd 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  .skeleton-image { height: 200px; }
+  .skeleton-line { height: 16px; margin: 18px 24px; border-radius: 4px; }
+  .skeleton-line.short { width: 40%; }
+
+  .event-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .btn-share { background: none; border: 1px solid #ddd; color: var(--muted); border-radius: 50%; width: 36px; height: 36px; padding: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .btn-share:hover { border-color: var(--etzel-gold); color: var(--etzel-gold); }
+  .share-toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--etzel-blue); color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 0.9em; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 10; }
+  .share-toast.show { opacity: 1; }
+
+  .waitlist-form { display: none; margin-top: 16px; padding-top: 16px; border-top: 1px dashed #ddd; width: 100%; }
+  .waitlist-form.open { display: block; }
+  .waitlist-form label { display: block; font-size: 0.9em; margin: 10px 0 4px; color: var(--muted); }
+  .waitlist-form input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 1em; font-family: inherit; }
+  .waitlist-form .actions { margin-top: 14px; display: flex; gap: 10px; }
+  .btn-outline { background: none; border: 2px solid var(--etzel-gold); color: var(--etzel-gold); font-weight: 600; }
+  .btn-outline:hover { background: var(--etzel-gold); color: #fff; }
+
+  .ended-events { margin-top: 10px; }
+  .ended-events summary { cursor: pointer; color: var(--muted); font-size: 0.95em; padding: 10px 0; }
+  .ended-event-row { padding: 10px 0; border-top: 1px solid #eee; }
+  .ended-event-row b { color: var(--muted); }
 </style>
 </head>
 <body>
@@ -67,18 +98,25 @@
 </div>
 
 <main id="eventsContainer">
-  <div class="empty-state">טוען אירועים...</div>
+  <div class="skeleton-card"><div class="skeleton-block skeleton-image"></div><div class="skeleton-block skeleton-line"></div><div class="skeleton-block skeleton-line short"></div></div>
+  <div class="skeleton-card"><div class="skeleton-block skeleton-line"></div><div class="skeleton-block skeleton-line short"></div></div>
 </main>
+
+<div class="share-toast" id="shareToast">הקישור הועתק!</div>
 
 <footer>מוזיאון האצ"ל</footer>
 
 <script type="module">
 import { db } from './firebase-init.js';
 import {
-  collection, getDocs, doc, runTransaction, serverTimestamp, query, orderBy
+  collection, getDocs, getDoc, setDoc, doc, runTransaction, serverTimestamp, query, orderBy
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const container = document.getElementById('eventsContainer');
+
+const ICON_CALENDAR = '<svg class="icon" viewBox="0 0 24 24"><path d="M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7zm12 8v10H5V10h14z"/></svg>';
+const ICON_CLOCK = '<svg class="icon" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16zm-1 2v6.41l4.29 4.3 1.42-1.42L13 11.59V6h-2z"/></svg>';
+const ICON_SHARE = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7a2.98 2.98 0 0 0 0-1.4l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 1 0-3-3c0 .24.04.47.09.7L8.04 9.81a3 3 0 1 0 0 4.38l7.13 4.16c-.05.21-.08.43-.08.65a2.99 2.99 0 1 0 3-3z"/></svg>';
 
 async function loadEvents() {
   const eventsSnap = await getDocs(collection(db, 'events'));
@@ -89,22 +127,36 @@ async function loadEvents() {
     return;
   }
 
-  container.innerHTML = '';
+  const now = nowDateTimeString();
+  const upcoming = [];
+  const ended = [];
+
   for (const eventDoc of events) {
     const event = eventDoc.data();
+    const sessionsSnap = await getDocs(query(collection(db, 'events', eventDoc.id, 'sessions'), orderBy('dateTime')));
+    const allSessions = sessionsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const futureSessions = allSessions.filter(s => !s.dateTime || s.dateTime >= now);
+
+    if (allSessions.length > 0 && futureSessions.length === 0) {
+      ended.push({ id: eventDoc.id, event });
+    } else {
+      const soonest = futureSessions.length ? futureSessions[0].dateTime : '9999';
+      upcoming.push({ id: eventDoc.id, event, futureSessions, sortKey: soonest || '9999' });
+    }
+  }
+
+  upcoming.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+
+  container.innerHTML = '';
+  for (const { id, event, futureSessions } of upcoming) {
     const card = document.createElement('div');
     card.className = 'event-card';
+    card.id = `event-${id}`;
 
-    const sessionsSnap = await getDocs(query(collection(db, 'events', eventDoc.id, 'sessions'), orderBy('dateTime')));
-    const now = nowDateTimeString();
-
-    let sessionsHtml = '';
-    sessionsSnap.forEach(sDoc => {
-      const s = sDoc.data();
-      if (s.dateTime && s.dateTime < now) return;
+    let sessionsHtml = futureSessions.map(s => {
       const spotsLeft = s.capacity - (s.registeredCount || 0);
-      sessionsHtml += renderSession(eventDoc.id, sDoc.id, s, spotsLeft, event.title);
-    });
+      return renderSession(id, s.id, s, spotsLeft, event.title);
+    }).join('');
 
     if (!sessionsHtml) {
       sessionsHtml = '<p class="empty-state" style="padding:20px 0;">אין סבבים פתוחים לאירוע זה כרגע.</p>';
@@ -117,7 +169,10 @@ async function loadEvents() {
     card.innerHTML = `
       ${imageHtml}
       <div class="event-body">
-        <h2>${escapeHtml(event.title || '')}</h2>
+        <div class="event-header">
+          <h2>${escapeHtml(event.title || '')}</h2>
+          <button type="button" class="btn-share" data-event="${id}" data-title="${escapeHtml(event.title || '')}" aria-label="שתף אירוע">${ICON_SHARE}</button>
+        </div>
         <div class="event-desc">${escapeHtml(event.description || '')}</div>
         ${sessionsHtml}
       </div>
@@ -125,7 +180,27 @@ async function loadEvents() {
     container.appendChild(card);
   }
 
+  if (ended.length > 0) {
+    const details = document.createElement('details');
+    details.className = 'ended-events';
+    const rows = ended.map(({ event }) => `
+      <div class="ended-event-row">
+        <b>${escapeHtml(event.title || '')}</b>
+        <div class="muted" style="font-size:0.9em;">${escapeHtml(event.description || '')}</div>
+      </div>
+    `).join('');
+    details.innerHTML = `<summary>אירועים שהסתיימו (${ended.length})</summary>${rows}`;
+    container.appendChild(details);
+  }
+
   attachHandlers();
+  scrollToHashEvent();
+}
+
+function scrollToHashEvent() {
+  if (!location.hash) return;
+  const el = document.querySelector(location.hash);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function renderSession(eventId, sessionId, s, spotsLeft, eventTitle) {
@@ -133,11 +208,13 @@ function renderSession(eventId, sessionId, s, spotsLeft, eventTitle) {
   return `
     <div class="session-row" data-event="${eventId}" data-session="${sessionId}" data-datetime="${escapeHtml(s.dateTime || '')}" data-title="${escapeHtml(eventTitle || '')}">
       <div class="session-info">
-        <b><bdi dir="ltr">${formatDate(s.date)} · ${escapeHtml(s.time)}</bdi></b>
+        <b><bdi dir="ltr">${ICON_CALENDAR}${formatDate(s.date)} · ${ICON_CLOCK}${escapeHtml(s.time)}</bdi></b>
         <span class="spots-left ${spotsLeft <= 3 ? 'low' : ''}">${full ? 'אין מקומות פנויים' : spotsLeft + ' מקומות פנויים'}</span>
       </div>
       <div class="session-actions">
-        <button class="btn-primary btn-toggle-form" ${full ? 'disabled' : ''}>${full ? 'מלא' : 'הירשם'}</button>
+        ${full
+          ? '<button type="button" class="btn-outline btn-toggle-waitlist">הצטרפ/י לרשימת המתנה</button>'
+          : '<button class="btn-primary btn-toggle-form">הירשם</button>'}
         <button type="button" class="btn-link btn-toggle-cancel">ביטול הרשמה</button>
       </div>
       <form class="reg-form">
@@ -161,6 +238,31 @@ function renderSession(eventId, sessionId, s, spotsLeft, eventTitle) {
           <div class="msg"></div>
           <div class="actions">
             <a class="btn-primary btn-add-calendar hidden-link" target="_blank" rel="noopener" style="text-decoration:none; display:none;">הוסף ליומן</a>
+            <button type="button" class="btn-primary btn-close-result">סגור</button>
+          </div>
+        </div>
+      </form>
+      <form class="waitlist-form">
+        <div class="form-fields">
+          <p class="muted" style="margin:0 0 10px; font-size:0.85em;">הסבב מלא. נרשום אתכם לרשימת המתנה, וניצור קשר אם יתפנה מקום.</p>
+          <label>שם מלא</label>
+          <input type="text" name="name" required>
+          <label>טלפון</label>
+          <input type="tel" name="phone" required>
+          <label>אימייל (אופציונלי)</label>
+          <input type="email" name="email">
+          <label>טלפון נוסף (אופציונלי)</label>
+          <input type="tel" name="phone2">
+          <label>מספר אנשים</label>
+          <input type="number" name="partySize" min="1" value="1" required>
+          <div class="actions">
+            <button type="submit" class="btn-primary">הצטרפ/י לרשימת המתנה</button>
+          </div>
+          <div class="msg" style="display:none;"></div>
+        </div>
+        <div class="form-result" style="display:none;">
+          <div class="msg"></div>
+          <div class="actions">
             <button type="button" class="btn-primary btn-close-result">סגור</button>
           </div>
         </div>
@@ -199,6 +301,67 @@ function attachHandlers() {
     btn.addEventListener('click', () => {
       const form = btn.closest('.session-row').querySelector('.cancel-form');
       form.classList.toggle('open');
+    });
+  });
+
+  container.querySelectorAll('.btn-toggle-waitlist').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const form = btn.closest('.session-row').querySelector('.waitlist-form');
+      form.classList.toggle('open');
+    });
+  });
+
+  container.querySelectorAll('.waitlist-form').forEach(form => {
+    const fields = form.querySelector('.form-fields');
+    const result = form.querySelector('.form-result');
+    const resultMsg = result.querySelector('.msg');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const row = form.closest('.session-row');
+      const eventId = row.dataset.event;
+      const sessionId = row.dataset.session;
+      const submitBtn = form.querySelector('button[type="submit"]');
+      const name = form.name.value.trim();
+      const phone = form.phone.value.trim();
+      const email = form.email.value.trim();
+      const phone2 = form.phone2.value.trim();
+      const partySize = parseInt(form.partySize.value, 10);
+
+      submitBtn.disabled = true;
+
+      try {
+        await joinWaitlist(eventId, sessionId, { name, phone, email, phone2, partySize });
+        resultMsg.className = 'msg success';
+        resultMsg.textContent = 'נרשמת לרשימת ההמתנה. ניצור קשר אם יתפנה מקום.';
+      } catch (err) {
+        resultMsg.className = 'msg error';
+        resultMsg.textContent = err.message || 'שגיאה, נסו שוב.';
+      }
+
+      fields.style.display = 'none';
+      result.style.display = 'block';
+      submitBtn.disabled = false;
+    });
+
+    result.querySelector('.btn-close-result').addEventListener('click', () => {
+      loadEvents();
+    });
+  });
+
+  container.querySelectorAll('.btn-share').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const url = `${location.origin}${location.pathname}#event-${btn.dataset.event}`;
+      if (navigator.share) {
+        try { await navigator.share({ title: btn.dataset.title, url }); } catch (e) { /* user cancelled */ }
+      } else {
+        try {
+          await navigator.clipboard.writeText(url);
+          showToast();
+        } catch (e) {
+          prompt('העתק/י את הקישור:', url);
+        }
+      }
     });
   });
 
@@ -321,6 +484,19 @@ async function registerForSession(eventId, sessionId, { name, phone, email, phon
     tx.update(sessionRef, { registeredCount: newCount });
     tx.set(regRef, { name, phone, email: email || '', phone2: phone2 || '', partySize, createdAt: serverTimestamp() });
   });
+}
+
+async function joinWaitlist(eventId, sessionId, { name, phone, email, phone2, partySize }) {
+  const wlRef = doc(db, 'events', eventId, 'sessions', sessionId, 'waitlist', registrationId(sessionId, name, phone));
+  const wlSnap = await getDoc(wlRef);
+  if (wlSnap.exists()) throw new Error('כבר נרשמת לרשימת ההמתנה עם הפרטים האלה.');
+  await setDoc(wlRef, { name, phone, email: email || '', phone2: phone2 || '', partySize, createdAt: serverTimestamp() });
+}
+
+function showToast() {
+  const toast = document.getElementById('shareToast');
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2000);
 }
 
 async function cancelRegistration(eventId, sessionId, { name, phone }) {

@@ -37,6 +37,10 @@
   #loginScreen { max-width: 360px; margin: 80px auto; }
   .hidden { display: none !important; }
   .muted { color: var(--muted); font-size: 0.9em; }
+  .glance-row { padding: 8px 0; border-top: 1px solid #eee; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .glance-row:first-child { border-top: none; }
+  details.ended-section { margin-top: 10px; }
+  details.ended-section > summary { cursor: pointer; color: var(--muted); padding: 10px 0; font-weight: bold; }
 </style>
 </head>
 <body>
@@ -61,6 +65,11 @@
   </div>
 
   <div id="dashboard" class="hidden">
+    <div class="card">
+      <h2>הסבבים הקרובים (7 ימים)</h2>
+      <div id="glancePanel"><p class="muted">טוען...</p></div>
+    </div>
+
     <div class="card">
       <h2>אירוע חדש</h2>
       <form id="newEventForm">
@@ -172,8 +181,15 @@ document.getElementById('newEventForm').addEventListener('submit', async (e) => 
 
 async function loadEvents() {
   const list = document.getElementById('eventsList');
+  const glancePanel = document.getElementById('glancePanel');
   const eventsSnap = await getDocs(query(collection(db, 'events'), orderBy('createdAt', 'desc')));
   list.innerHTML = '';
+
+  const now = nowDateTimeString();
+  const weekAhead = plusDaysDateTimeString(7);
+  const glanceRows = [];
+  const activeCards = [];
+  const endedCards = [];
 
   for (const eventDoc of eventsSnap.docs) {
     const event = eventDoc.data();
@@ -183,9 +199,14 @@ async function loadEvents() {
 
     const sessionsSnap = await getDocs(query(collection(db, 'events', eventId, 'sessions'), orderBy('dateTime')));
     let sessionsHtml = '';
+    let hasFutureSession = sessionsSnap.size === 0;
     sessionsSnap.forEach(sDoc => {
       const s = sDoc.data();
       sessionsHtml += renderSessionItem(eventId, sDoc.id, s);
+      if (!s.dateTime || s.dateTime >= now) hasFutureSession = true;
+      if (s.dateTime && s.dateTime >= now && s.dateTime <= weekAhead) {
+        glanceRows.push({ eventTitle: event.title, ...s });
+      }
     });
 
     const thumbHtml = event.imageUrl
@@ -232,10 +253,50 @@ async function loadEvents() {
         <div class="actions"><button type="submit" class="btn-primary">הוסף סבב</button></div>
       </form>
     `;
-    list.appendChild(card);
+
+    if (hasFutureSession) {
+      activeCards.push(card);
+    } else {
+      endedCards.push(card);
+    }
   }
 
+  activeCards.forEach(c => list.appendChild(c));
+
+  if (endedCards.length > 0) {
+    const details = document.createElement('details');
+    details.className = 'ended-section';
+    const summary = document.createElement('summary');
+    summary.textContent = `אירועים שהסתיימו (${endedCards.length})`;
+    details.appendChild(summary);
+    endedCards.forEach(c => details.appendChild(c));
+    list.appendChild(details);
+  }
+
+  glanceRows.sort((a, b) => a.dateTime.localeCompare(b.dateTime));
+  glancePanel.innerHTML = glanceRows.length === 0
+    ? '<p class="muted">אין סבבים בשבוע הקרוב.</p>'
+    : glanceRows.map(s => `
+        <div class="glance-row">
+          <b>${escapeHtml(s.eventTitle)}</b>
+          <bdi dir="ltr">${formatDate(s.date)} · ${escapeHtml(s.time)}</bdi>
+          <span class="badge">${s.registeredCount || 0}/${s.capacity}</span>
+        </div>
+      `).join('');
+
   attachEventHandlers();
+}
+
+function nowDateTimeString() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function plusDaysDateTimeString(days) {
+  const d = new Date(Date.now() + days * 86400000);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function renderSessionItem(eventId, sessionId, s) {
@@ -248,6 +309,7 @@ function renderSessionItem(eventId, sessionId, s) {
             <button class="btn-secondary btn-edit-session">ערוך</button>
             <button class="btn-secondary btn-add-manual-reg">הוסף נרשם</button>
             <button class="btn-secondary btn-show-regs">הצג נרשמים</button>
+            <button class="btn-secondary btn-show-waitlist">רשימת המתנה</button>
             <button class="btn-danger btn-delete-session">מחק סבב</button>
           </div>
         </div>
@@ -284,6 +346,7 @@ function renderSessionItem(eventId, sessionId, s) {
       </form>
 
       <div class="regs-container"></div>
+      <div class="waitlist-container"></div>
     </div>
   `;
 }
@@ -484,6 +547,79 @@ function attachEventHandlers() {
         regsContainer.querySelector('.btn-export-csv').addEventListener('click', () => exportCsv(regs));
       }
       regsContainer.dataset.loaded = '1';
+    });
+  });
+
+  document.querySelectorAll('.btn-show-waitlist').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const item = btn.closest('.session-item');
+      const wlContainer = item.querySelector('.waitlist-container');
+      if (wlContainer.dataset.loaded === '1') {
+        wlContainer.innerHTML = '';
+        wlContainer.dataset.loaded = '0';
+        return;
+      }
+      await renderWaitlist(item, wlContainer);
+      wlContainer.dataset.loaded = '1';
+    });
+  });
+}
+
+async function renderWaitlist(item, wlContainer) {
+  const eventId = item.dataset.event;
+  const sessionId = item.dataset.session;
+  const wlSnap = await getDocs(collection(db, 'events', eventId, 'sessions', sessionId, 'waitlist'));
+  const entries = wlSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+  if (entries.length === 0) {
+    wlContainer.innerHTML = '<p class="muted">אין ברשימת ההמתנה.</p>';
+    return;
+  }
+
+  wlContainer.innerHTML = `
+    <table>
+      <thead><tr><th>שם</th><th>טלפון</th><th>טלפון נוסף</th><th>אימייל</th><th>כמות</th><th></th></tr></thead>
+      <tbody>${entries.map(w => `
+        <tr data-id="${w.id}">
+          <td>${escapeHtml(w.name)}</td><td>${escapeHtml(w.phone)}</td><td>${escapeHtml(w.phone2)}</td><td>${escapeHtml(w.email)}</td><td>${w.partySize}</td>
+          <td>
+            <button type="button" class="btn-secondary btn-promote-waitlist" style="padding:4px 10px; font-size:0.85em;">העבר להרשמה</button>
+            <button type="button" class="btn-danger btn-remove-waitlist" style="padding:4px 10px; font-size:0.85em;">מחק</button>
+          </td>
+        </tr>
+      `).join('')}</tbody>
+    </table>
+  `;
+
+  wlContainer.querySelectorAll('.btn-remove-waitlist').forEach(b => {
+    b.addEventListener('click', async () => {
+      const wlId = b.closest('tr').dataset.id;
+      await deleteDoc(doc(db, 'events', eventId, 'sessions', sessionId, 'waitlist', wlId));
+      await renderWaitlist(item, wlContainer);
+    });
+  });
+
+  wlContainer.querySelectorAll('.btn-promote-waitlist').forEach(b => {
+    b.addEventListener('click', async () => {
+      const wlId = b.closest('tr').dataset.id;
+      const entry = entries.find(w => w.id === wlId);
+      const sessionRef = doc(db, 'events', eventId, 'sessions', sessionId);
+      const regRef = doc(db, 'events', eventId, 'sessions', sessionId, 'registrations', registrationId(sessionId, entry.name, entry.phone));
+      try {
+        await runTransaction(db, async (tx) => {
+          const [sessionSnap, regSnap] = [await tx.get(sessionRef), await tx.get(regRef)];
+          if (regSnap.exists()) throw new Error('כבר קיימת הרשמה עם השם והטלפון האלה לסבב הזה.');
+          const data = sessionSnap.data();
+          const newCount = (data.registeredCount || 0) + entry.partySize;
+          if (newCount > data.capacity) throw new Error('אין מספיק מקומות פנויים בסבב הזה.');
+          tx.update(sessionRef, { registeredCount: newCount });
+          tx.set(regRef, { name: entry.name, phone: entry.phone, email: entry.email || '', phone2: entry.phone2 || '', partySize: entry.partySize, createdAt: serverTimestamp() });
+        });
+        await deleteDoc(doc(db, 'events', eventId, 'sessions', sessionId, 'waitlist', wlId));
+        loadEvents();
+      } catch (err) {
+        alert(err.message);
+      }
     });
   });
 }
