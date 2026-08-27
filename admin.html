@@ -87,7 +87,7 @@ import {
   onAuthStateChanged, signInWithEmailAndPassword, signOut
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
-  collection, getDocs, addDoc, deleteDoc, doc, query, orderBy, serverTimestamp
+  collection, getDocs, addDoc, deleteDoc, doc, updateDoc, runTransaction, query, orderBy, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const loginScreen = document.getElementById('loginScreen');
@@ -192,13 +192,32 @@ async function loadEvents() {
       ? `<img src="${escapeHtml(event.imageUrl)}" alt="" style="width:100%; max-width:260px; border-radius:8px; display:block; margin-bottom:12px;">`
       : '';
 
+    card.dataset.event = eventId;
     card.innerHTML = `
-      ${thumbHtml}
-      <h2>${escapeHtml(event.title)}</h2>
-      <p class="muted">${escapeHtml(event.description || '')}</p>
-      <div class="actions">
-        <button class="btn-danger btn-delete-event" data-event="${eventId}">מחק אירוע</button>
+      <div class="event-view">
+        ${thumbHtml}
+        <h2>${escapeHtml(event.title)} ${event.active === false ? '<span class="badge" style="background:#fdecea; color:#a4332c;">מוסתר</span>' : ''}</h2>
+        <p class="muted">${escapeHtml(event.description || '')}</p>
+        <div class="actions">
+          <button class="btn-secondary btn-edit-event" data-event="${eventId}">ערוך</button>
+          <button class="btn-secondary btn-toggle-active" data-event="${eventId}" data-active="${event.active !== false}">${event.active === false ? 'הצג אירוע' : 'הסתר אירוע'}</button>
+          <button class="btn-danger btn-delete-event" data-event="${eventId}">מחק אירוע</button>
+        </div>
       </div>
+
+      <form class="event-edit-form hidden" data-event="${eventId}" style="margin-top:10px;">
+        <label>כותרת</label>
+        <input type="text" name="title" value="${escapeHtml(event.title)}" required>
+        <label>תיאור</label>
+        <textarea name="description" rows="3">${escapeHtml(event.description || '')}</textarea>
+        <label>תמונה חדשה (אופציונלי, מחליפה את הקיימת)</label>
+        <input type="file" name="image" accept="image/*">
+        <div class="actions">
+          <button type="submit" class="btn-primary">שמור</button>
+          <button type="button" class="btn-secondary btn-cancel-edit-event">ביטול</button>
+        </div>
+        <div class="msg error hidden"></div>
+      </form>
 
       <hr style="margin:20px 0; border:0; border-top:1px solid #eee;">
       <h3>סבבים</h3>
@@ -222,13 +241,48 @@ async function loadEvents() {
 function renderSessionItem(eventId, sessionId, s) {
   return `
     <div class="session-item" data-event="${eventId}" data-session="${sessionId}">
-      <div class="top">
-        <div><b><bdi dir="ltr">${formatDate(s.date)} · ${escapeHtml(s.time)}</bdi></b> <span class="badge">${s.registeredCount || 0}/${s.capacity}</span></div>
-        <div class="actions" style="margin-top:0;">
-          <button class="btn-secondary btn-show-regs">הצג נרשמים</button>
-          <button class="btn-danger btn-delete-session">מחק סבב</button>
+      <div class="session-view">
+        <div class="top">
+          <div><b><bdi dir="ltr">${formatDate(s.date)} · ${escapeHtml(s.time)}</bdi></b> <span class="badge">${s.registeredCount || 0}/${s.capacity}</span></div>
+          <div class="actions" style="margin-top:0;">
+            <button class="btn-secondary btn-edit-session">ערוך</button>
+            <button class="btn-secondary btn-add-manual-reg">הוסף נרשם</button>
+            <button class="btn-secondary btn-show-regs">הצג נרשמים</button>
+            <button class="btn-danger btn-delete-session">מחק סבב</button>
+          </div>
         </div>
       </div>
+
+      <form class="session-edit-form hidden" style="margin-top:10px;">
+        <div class="row">
+          <div><label>תאריך</label><input type="date" name="date" value="${escapeHtml(s.date)}" required></div>
+          <div><label>שעה</label><input type="time" name="time" value="${escapeHtml(s.time)}" required></div>
+          <div><label>קיבולת</label><input type="number" name="capacity" min="${s.registeredCount || 0}" value="${s.capacity}" required></div>
+        </div>
+        <div class="actions">
+          <button type="submit" class="btn-primary">שמור</button>
+          <button type="button" class="btn-secondary btn-cancel-edit-session">ביטול</button>
+        </div>
+        <div class="msg error hidden"></div>
+      </form>
+
+      <form class="manual-reg-form hidden" style="margin-top:10px;">
+        <div class="row">
+          <div><label>שם מלא</label><input type="text" name="name" required></div>
+          <div><label>טלפון</label><input type="tel" name="phone" required></div>
+        </div>
+        <div class="row">
+          <div><label>אימייל (אופציונלי)</label><input type="email" name="email"></div>
+          <div><label>טלפון נוסף (אופציונלי)</label><input type="tel" name="phone2"></div>
+          <div><label>מספר אנשים</label><input type="number" name="partySize" min="1" value="1" required></div>
+        </div>
+        <div class="actions">
+          <button type="submit" class="btn-primary">הוסף</button>
+          <button type="button" class="btn-secondary btn-cancel-manual-reg">ביטול</button>
+        </div>
+        <div class="msg error hidden"></div>
+      </form>
+
       <div class="regs-container"></div>
     </div>
   `;
@@ -240,6 +294,58 @@ function attachEventHandlers() {
       if (!confirm('למחוק את האירוע? פעולה זו לא הופכת.')) return;
       await deleteDoc(doc(db, 'events', btn.dataset.event));
       loadEvents();
+    });
+  });
+
+  document.querySelectorAll('.btn-toggle-active').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const isActive = btn.dataset.active === 'true';
+      await updateDoc(doc(db, 'events', btn.dataset.event), { active: !isActive });
+      loadEvents();
+    });
+  });
+
+  document.querySelectorAll('.btn-edit-event').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const card = btn.closest('.card');
+      card.querySelector('.event-view').classList.add('hidden');
+      card.querySelector('.event-edit-form').classList.remove('hidden');
+    });
+  });
+
+  document.querySelectorAll('.btn-cancel-edit-event').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const card = btn.closest('.card');
+      card.querySelector('.event-edit-form').classList.add('hidden');
+      card.querySelector('.event-view').classList.remove('hidden');
+    });
+  });
+
+  document.querySelectorAll('.event-edit-form').forEach(form => {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const eventId = form.dataset.event;
+      const submitBtn = form.querySelector('button[type="submit"]');
+      const msg = form.querySelector('.msg');
+      const title = form.title.value.trim();
+      const description = form.description.value.trim();
+      const imageFile = form.image.files[0];
+      submitBtn.disabled = true;
+      msg.classList.add('hidden');
+      try {
+        const updateData = { title, description };
+        if (imageFile) {
+          submitBtn.textContent = 'מעלה תמונה...';
+          updateData.imageUrl = await uploadImage(imageFile);
+        }
+        await updateDoc(doc(db, 'events', eventId), updateData);
+        loadEvents();
+      } catch (err) {
+        msg.textContent = err.message;
+        msg.classList.remove('hidden');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'שמור';
+      }
     });
   });
 
@@ -263,6 +369,92 @@ function attachEventHandlers() {
       await Promise.all(regsSnap.docs.map(r => deleteDoc(r.ref)));
       await deleteDoc(doc(db, 'events', item.dataset.event, 'sessions', item.dataset.session));
       loadEvents();
+    });
+  });
+
+  document.querySelectorAll('.btn-edit-session').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = btn.closest('.session-item');
+      item.querySelector('.session-view').classList.add('hidden');
+      item.querySelector('.session-edit-form').classList.remove('hidden');
+    });
+  });
+
+  document.querySelectorAll('.btn-cancel-edit-session').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = btn.closest('.session-item');
+      item.querySelector('.session-edit-form').classList.add('hidden');
+      item.querySelector('.session-view').classList.remove('hidden');
+    });
+  });
+
+  document.querySelectorAll('.session-edit-form').forEach(form => {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const item = form.closest('.session-item');
+      const msg = form.querySelector('.msg');
+      const date = form.date.value;
+      const time = form.time.value;
+      const capacity = parseInt(form.capacity.value, 10);
+      msg.classList.add('hidden');
+      if (capacity < parseInt(form.capacity.min, 10)) {
+        msg.textContent = `הקיבולת לא יכולה להיות קטנה ממספר הנרשמים הקיים (${form.capacity.min}).`;
+        msg.classList.remove('hidden');
+        return;
+      }
+      await updateDoc(doc(db, 'events', item.dataset.event, 'sessions', item.dataset.session), {
+        date, time, dateTime: `${date}T${time}`, capacity
+      });
+      loadEvents();
+    });
+  });
+
+  document.querySelectorAll('.btn-add-manual-reg').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = btn.closest('.session-item');
+      item.querySelector('.manual-reg-form').classList.toggle('hidden');
+    });
+  });
+
+  document.querySelectorAll('.btn-cancel-manual-reg').forEach(btn => {
+    btn.addEventListener('click', () => {
+      btn.closest('.manual-reg-form').classList.add('hidden');
+    });
+  });
+
+  document.querySelectorAll('.manual-reg-form').forEach(form => {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const item = form.closest('.session-item');
+      const msg = form.querySelector('.msg');
+      const submitBtn = form.querySelector('button[type="submit"]');
+      const name = form.name.value.trim();
+      const phone = form.phone.value.trim();
+      const email = form.email.value.trim();
+      const phone2 = form.phone2.value.trim();
+      const partySize = parseInt(form.partySize.value, 10);
+
+      submitBtn.disabled = true;
+      msg.classList.add('hidden');
+
+      const sessionRef = doc(db, 'events', item.dataset.event, 'sessions', item.dataset.session);
+      const regRef = doc(collection(db, 'events', item.dataset.event, 'sessions', item.dataset.session, 'registrations'));
+
+      try {
+        await runTransaction(db, async (tx) => {
+          const sessionSnap = await tx.get(sessionRef);
+          const data = sessionSnap.data();
+          const newCount = (data.registeredCount || 0) + partySize;
+          if (newCount > data.capacity) throw new Error('אין מספיק מקומות פנויים בסבב הזה.');
+          tx.update(sessionRef, { registeredCount: newCount });
+          tx.set(regRef, { name, phone, email: email || '', phone2: phone2 || '', partySize, createdAt: serverTimestamp() });
+        });
+        loadEvents();
+      } catch (err) {
+        msg.textContent = err.message;
+        msg.classList.remove('hidden');
+        submitBtn.disabled = false;
+      }
     });
   });
 

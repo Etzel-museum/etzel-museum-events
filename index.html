@@ -92,12 +92,14 @@ async function loadEvents() {
     card.className = 'event-card';
 
     const sessionsSnap = await getDocs(query(collection(db, 'events', eventDoc.id, 'sessions'), orderBy('dateTime')));
+    const now = nowDateTimeString();
 
     let sessionsHtml = '';
     sessionsSnap.forEach(sDoc => {
       const s = sDoc.data();
+      if (s.dateTime && s.dateTime < now) return;
       const spotsLeft = s.capacity - (s.registeredCount || 0);
-      sessionsHtml += renderSession(eventDoc.id, sDoc.id, s, spotsLeft);
+      sessionsHtml += renderSession(eventDoc.id, sDoc.id, s, spotsLeft, event.title);
     });
 
     if (!sessionsHtml) {
@@ -122,10 +124,10 @@ async function loadEvents() {
   attachHandlers();
 }
 
-function renderSession(eventId, sessionId, s, spotsLeft) {
+function renderSession(eventId, sessionId, s, spotsLeft, eventTitle) {
   const full = spotsLeft <= 0;
   return `
-    <div class="session-row" data-event="${eventId}" data-session="${sessionId}">
+    <div class="session-row" data-event="${eventId}" data-session="${sessionId}" data-datetime="${escapeHtml(s.dateTime || '')}" data-title="${escapeHtml(eventTitle || '')}">
       <div class="session-info">
         <b><bdi dir="ltr">${formatDate(s.date)} · ${escapeHtml(s.time)}</bdi></b>
         <span class="spots-left ${spotsLeft <= 3 ? 'low' : ''}">${full ? 'אין מקומות פנויים' : spotsLeft + ' מקומות פנויים'}</span>
@@ -142,7 +144,7 @@ function renderSession(eventId, sessionId, s, spotsLeft) {
           <label>טלפון נוסף (אופציונלי)</label>
           <input type="tel" name="phone2">
           <label>מספר אנשים</label>
-          <input type="number" name="partySize" min="1" value="1" required>
+          <input type="number" name="partySize" min="1" max="${spotsLeft}" value="1" required>
           <div class="actions">
             <button type="submit" class="btn-primary">שלח הרשמה</button>
           </div>
@@ -151,6 +153,7 @@ function renderSession(eventId, sessionId, s, spotsLeft) {
         <div class="form-result" style="display:none;">
           <div class="msg"></div>
           <div class="actions">
+            <a class="btn-primary btn-add-calendar hidden-link" target="_blank" rel="noopener" style="text-decoration:none; display:none;">הוסף ליומן</a>
             <button type="button" class="btn-primary btn-close-result">סגור</button>
           </div>
         </div>
@@ -186,13 +189,18 @@ function attachHandlers() {
 
       submitBtn.disabled = true;
 
+      const calendarLink = result.querySelector('.btn-add-calendar');
+
       try {
         await registerForSession(eventId, sessionId, { name, phone, email, phone2, partySize });
         resultMsg.className = 'msg success';
         resultMsg.textContent = 'ההרשמה נקלטה בהצלחה!';
+        calendarLink.href = buildCalendarLink(row.dataset.title, row.dataset.datetime);
+        calendarLink.style.display = 'inline-block';
       } catch (err) {
         resultMsg.className = 'msg error';
         resultMsg.textContent = err.message || 'שגיאה בהרשמה, נסו שוב.';
+        calendarLink.style.display = 'none';
       }
 
       fields.style.display = 'none';
@@ -227,6 +235,31 @@ function formatDate(dateStr) {
   const [y, m, d] = (dateStr || '').split('-');
   if (!y || !m || !d) return escapeHtml(dateStr || '');
   return `${d}/${m}/${y}`;
+}
+
+function nowDateTimeString() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+const MUSEUM_ADDRESS = 'המלך ג\'ורג\' 38, תל אביב-יפו, 6329802';
+const DEFAULT_EVENT_DURATION_MIN = 90;
+
+function buildCalendarLink(title, dateTimeStr) {
+  if (!dateTimeStr) return '#';
+  const start = new Date(dateTimeStr);
+  if (isNaN(start)) return '#';
+  const end = new Date(start.getTime() + DEFAULT_EVENT_DURATION_MIN * 60000);
+  const pad = n => String(n).padStart(2, '0');
+  const fmt = d => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: title || 'אירוע במוזיאון האצ"ל',
+    dates: `${fmt(start)}/${fmt(end)}`,
+    location: MUSEUM_ADDRESS
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
 function escapeHtml(str) {
