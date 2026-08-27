@@ -438,11 +438,12 @@ function attachEventHandlers() {
       msg.classList.add('hidden');
 
       const sessionRef = doc(db, 'events', item.dataset.event, 'sessions', item.dataset.session);
-      const regRef = doc(collection(db, 'events', item.dataset.event, 'sessions', item.dataset.session, 'registrations'));
+      const regRef = doc(db, 'events', item.dataset.event, 'sessions', item.dataset.session, 'registrations', registrationId(item.dataset.session, name, phone));
 
       try {
         await runTransaction(db, async (tx) => {
-          const sessionSnap = await tx.get(sessionRef);
+          const [sessionSnap, regSnap] = [await tx.get(sessionRef), await tx.get(regRef)];
+          if (regSnap.exists()) throw new Error('כבר קיימת הרשמה עם השם והטלפון האלה לסבב הזה.');
           const data = sessionSnap.data();
           const newCount = (data.registeredCount || 0) + partySize;
           if (newCount > data.capacity) throw new Error('אין מספיק מקומות פנויים בסבב הזה.');
@@ -505,6 +506,29 @@ function formatDate(dateStr) {
   const [y, m, d] = (dateStr || '').split('-');
   if (!y || !m || !d) return escapeHtml(dateStr || '');
   return `${d}/${m}/${y}`;
+}
+
+function normalizeName(name) {
+  return (name || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function normalizePhone(phone) {
+  return (phone || '').replace(/\D/g, '');
+}
+
+// Must match the same hash used in index.html so admin-added and
+// visitor-added registrations land on the same doc ID scheme.
+function hashString(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16);
+}
+
+function registrationId(sessionId, name, phone) {
+  return hashString(`${sessionId}|${normalizeName(name)}|${normalizePhone(phone)}`);
 }
 
 function escapeHtml(str) {

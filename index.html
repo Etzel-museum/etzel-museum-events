@@ -40,12 +40,16 @@
   .btn-primary:hover { background: var(--etzel-blue); }
   .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
 
-  .reg-form { display: none; margin-top: 16px; padding-top: 16px; border-top: 1px dashed #ddd; width: 100%; }
-  .reg-form.open { display: block; }
-  .reg-form label { display: block; font-size: 0.9em; margin: 10px 0 4px; color: var(--muted); }
-  .reg-form input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 1em; font-family: inherit; }
-  .reg-form input:focus { outline: none; border-color: var(--etzel-gold); }
-  .reg-form .actions { margin-top: 14px; display: flex; gap: 10px; }
+  .reg-form, .cancel-form { display: none; margin-top: 16px; padding-top: 16px; border-top: 1px dashed #ddd; width: 100%; }
+  .reg-form.open, .cancel-form.open { display: block; }
+  .reg-form label, .cancel-form label { display: block; font-size: 0.9em; margin: 10px 0 4px; color: var(--muted); }
+  .reg-form input, .cancel-form input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 1em; font-family: inherit; }
+  .reg-form input:focus, .cancel-form input:focus { outline: none; border-color: var(--etzel-gold); }
+  .reg-form .actions, .cancel-form .actions { margin-top: 14px; display: flex; gap: 10px; }
+
+  .btn-link { background: none; color: var(--muted); text-decoration: underline; padding: 6px 4px; font-size: 0.85em; border-radius: 0; }
+  .btn-link:hover { color: var(--etzel-blue); }
+  .session-actions { display: flex; align-items: center; gap: 10px; }
 
   .msg { margin-top: 10px; font-size: 0.9em; padding: 8px 10px; border-radius: 6px; }
   .msg.error { background: #fdecea; color: var(--danger); }
@@ -132,7 +136,10 @@ function renderSession(eventId, sessionId, s, spotsLeft, eventTitle) {
         <b><bdi dir="ltr">${formatDate(s.date)} · ${escapeHtml(s.time)}</bdi></b>
         <span class="spots-left ${spotsLeft <= 3 ? 'low' : ''}">${full ? 'אין מקומות פנויים' : spotsLeft + ' מקומות פנויים'}</span>
       </div>
-      <button class="btn-primary btn-toggle-form" ${full ? 'disabled' : ''}>${full ? 'מלא' : 'הירשם'}</button>
+      <div class="session-actions">
+        <button class="btn-primary btn-toggle-form" ${full ? 'disabled' : ''}>${full ? 'מלא' : 'הירשם'}</button>
+        <button type="button" class="btn-link btn-toggle-cancel">ביטול הרשמה</button>
+      </div>
       <form class="reg-form">
         <div class="form-fields">
           <label>שם מלא</label>
@@ -158,6 +165,24 @@ function renderSession(eventId, sessionId, s, spotsLeft, eventTitle) {
           </div>
         </div>
       </form>
+      <form class="cancel-form">
+        <div class="form-fields">
+          <p class="muted" style="margin:0 0 10px; font-size:0.85em;">הכנס/י שוב את השם והטלפון שאיתם נרשמת כדי לבטל.</p>
+          <label>שם מלא</label>
+          <input type="text" name="name" required>
+          <label>טלפון</label>
+          <input type="tel" name="phone" required>
+          <div class="actions">
+            <button type="submit" class="btn-primary">בטל הרשמה</button>
+          </div>
+        </div>
+        <div class="form-result" style="display:none;">
+          <div class="msg"></div>
+          <div class="actions">
+            <button type="button" class="btn-primary btn-close-result">סגור</button>
+          </div>
+        </div>
+      </form>
     </div>
   `;
 }
@@ -165,8 +190,50 @@ function renderSession(eventId, sessionId, s, spotsLeft, eventTitle) {
 function attachHandlers() {
   container.querySelectorAll('.btn-toggle-form').forEach(btn => {
     btn.addEventListener('click', () => {
-      const form = btn.parentElement.querySelector('.reg-form');
+      const form = btn.closest('.session-row').querySelector('.reg-form');
       form.classList.toggle('open');
+    });
+  });
+
+  container.querySelectorAll('.btn-toggle-cancel').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const form = btn.closest('.session-row').querySelector('.cancel-form');
+      form.classList.toggle('open');
+    });
+  });
+
+  container.querySelectorAll('.cancel-form').forEach(form => {
+    const fields = form.querySelector('.form-fields');
+    const result = form.querySelector('.form-result');
+    const resultMsg = result.querySelector('.msg');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const row = form.closest('.session-row');
+      const eventId = row.dataset.event;
+      const sessionId = row.dataset.session;
+      const submitBtn = form.querySelector('button[type="submit"]');
+      const name = form.name.value.trim();
+      const phone = form.phone.value.trim();
+
+      submitBtn.disabled = true;
+
+      try {
+        await cancelRegistration(eventId, sessionId, { name, phone });
+        resultMsg.className = 'msg success';
+        resultMsg.textContent = 'ההרשמה בוטלה בהצלחה.';
+      } catch (err) {
+        resultMsg.className = 'msg error';
+        resultMsg.textContent = err.message || 'שגיאה בביטול, נסו שוב.';
+      }
+
+      fields.style.display = 'none';
+      result.style.display = 'block';
+      submitBtn.disabled = false;
+    });
+
+    result.querySelector('.btn-close-result').addEventListener('click', () => {
+      loadEvents();
     });
   });
 
@@ -214,13 +281,38 @@ function attachHandlers() {
   });
 }
 
+function normalizeName(name) {
+  return (name || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function normalizePhone(phone) {
+  return (phone || '').replace(/\D/g, '');
+}
+
+// A simple, stable (non-cryptographic) hash - just needs to turn the same
+// name+phone into the same Firestore doc ID every time, both at registration
+// and at cancellation.
+function hashString(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16);
+}
+
+function registrationId(sessionId, name, phone) {
+  return hashString(`${sessionId}|${normalizeName(name)}|${normalizePhone(phone)}`);
+}
+
 async function registerForSession(eventId, sessionId, { name, phone, email, phone2, partySize }) {
   const sessionRef = doc(db, 'events', eventId, 'sessions', sessionId);
-  const regRef = doc(collection(db, 'events', eventId, 'sessions', sessionId, 'registrations'));
+  const regRef = doc(db, 'events', eventId, 'sessions', sessionId, 'registrations', registrationId(sessionId, name, phone));
 
   await runTransaction(db, async (tx) => {
-    const sessionSnap = await tx.get(sessionRef);
+    const [sessionSnap, regSnap] = [await tx.get(sessionRef), await tx.get(regRef)];
     if (!sessionSnap.exists()) throw new Error('הסבב לא נמצא.');
+    if (regSnap.exists()) throw new Error('כבר קיימת הרשמה עם השם והטלפון האלה לסבב הזה.');
     const data = sessionSnap.data();
     const newCount = (data.registeredCount || 0) + partySize;
     if (newCount > data.capacity) {
@@ -228,6 +320,20 @@ async function registerForSession(eventId, sessionId, { name, phone, email, phon
     }
     tx.update(sessionRef, { registeredCount: newCount });
     tx.set(regRef, { name, phone, email: email || '', phone2: phone2 || '', partySize, createdAt: serverTimestamp() });
+  });
+}
+
+async function cancelRegistration(eventId, sessionId, { name, phone }) {
+  const sessionRef = doc(db, 'events', eventId, 'sessions', sessionId);
+  const regRef = doc(db, 'events', eventId, 'sessions', sessionId, 'registrations', registrationId(sessionId, name, phone));
+
+  await runTransaction(db, async (tx) => {
+    const [sessionSnap, regSnap] = [await tx.get(sessionRef), await tx.get(regRef)];
+    if (!regSnap.exists()) throw new Error('לא נמצאה הרשמה תואמת לשם ולטלפון שהוזנו.');
+    const partySize = regSnap.data().partySize || 0;
+    const newCount = Math.max(0, (sessionSnap.data().registeredCount || 0) - partySize);
+    tx.delete(regRef);
+    tx.update(sessionRef, { registeredCount: newCount });
   });
 }
 
