@@ -280,10 +280,10 @@ function attachEventHandlers() {
       if (regs.length === 0) {
         regsContainer.innerHTML = '<p class="muted">אין נרשמים עדיין.</p>';
       } else {
-        let rows = regs.map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.phone)}</td><td>${r.partySize}</td></tr>`).join('');
+        let rows = regs.map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.phone)}</td><td>${escapeHtml(r.phone2)}</td><td>${escapeHtml(r.email)}</td><td>${r.partySize}</td></tr>`).join('');
         regsContainer.innerHTML = `
           <table>
-            <thead><tr><th>שם</th><th>טלפון</th><th>כמות</th></tr></thead>
+            <thead><tr><th>שם</th><th>טלפון</th><th>טלפון נוסף</th><th>אימייל</th><th>כמות</th></tr></thead>
             <tbody>${rows}</tbody>
           </table>
           <button class="btn-secondary btn-export-csv" style="margin-top:10px;">ייצוא CSV</button>
@@ -296,8 +296,9 @@ function attachEventHandlers() {
 }
 
 function exportCsv(regs) {
-  const header = 'שם,טלפון,כמות\n';
-  const rows = regs.map(r => `"${r.name.replace(/"/g, '""')}","${r.phone.replace(/"/g, '""')}",${r.partySize}`).join('\n');
+  const esc = (v) => `"${(v || '').replace(/"/g, '""')}"`;
+  const header = 'שם,טלפון,טלפון נוסף,אימייל,כמות\n';
+  const rows = regs.map(r => `${esc(r.name)},${esc(r.phone)},${esc(r.phone2)},${esc(r.email)},${r.partySize}`).join('\n');
   const csv = '﻿' + header + rows;
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
