@@ -132,20 +132,28 @@ function renderSession(eventId, sessionId, s, spotsLeft) {
       </div>
       <button class="btn-primary btn-toggle-form" ${full ? 'disabled' : ''}>${full ? 'מלא' : 'הירשם'}</button>
       <form class="reg-form">
-        <label>שם מלא</label>
-        <input type="text" name="name" required>
-        <label>טלפון</label>
-        <input type="tel" name="phone" required>
-        <label>אימייל (אופציונלי)</label>
-        <input type="email" name="email">
-        <label>טלפון נוסף (אופציונלי)</label>
-        <input type="tel" name="phone2">
-        <label>מספר אנשים</label>
-        <input type="number" name="partySize" min="1" value="1" required>
-        <div class="actions">
-          <button type="submit" class="btn-primary">שלח הרשמה</button>
+        <div class="form-fields">
+          <label>שם מלא</label>
+          <input type="text" name="name" required>
+          <label>טלפון</label>
+          <input type="tel" name="phone" required>
+          <label>אימייל (אופציונלי)</label>
+          <input type="email" name="email">
+          <label>טלפון נוסף (אופציונלי)</label>
+          <input type="tel" name="phone2">
+          <label>מספר אנשים</label>
+          <input type="number" name="partySize" min="1" value="1" required>
+          <div class="actions">
+            <button type="submit" class="btn-primary">שלח הרשמה</button>
+          </div>
+          <div class="msg" style="display:none;"></div>
         </div>
-        <div class="msg" style="display:none;"></div>
+        <div class="form-result" style="display:none;">
+          <div class="msg"></div>
+          <div class="actions">
+            <button type="button" class="btn-primary btn-close-result">סגור</button>
+          </div>
+        </div>
       </form>
     </div>
   `;
@@ -160,12 +168,15 @@ function attachHandlers() {
   });
 
   container.querySelectorAll('.reg-form').forEach(form => {
+    const fields = form.querySelector('.form-fields');
+    const result = form.querySelector('.form-result');
+    const resultMsg = result.querySelector('.msg');
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const row = form.closest('.session-row');
       const eventId = row.dataset.event;
       const sessionId = row.dataset.session;
-      const msg = form.querySelector('.msg');
       const submitBtn = form.querySelector('button[type="submit"]');
       const name = form.name.value.trim();
       const phone = form.phone.value.trim();
@@ -174,21 +185,23 @@ function attachHandlers() {
       const partySize = parseInt(form.partySize.value, 10);
 
       submitBtn.disabled = true;
-      msg.style.display = 'none';
 
       try {
         await registerForSession(eventId, sessionId, { name, phone, email, phone2, partySize });
-        msg.className = 'msg success';
-        msg.textContent = 'ההרשמה נקלטה בהצלחה!';
-        msg.style.display = 'block';
-        form.reset();
-        await loadEvents();
+        resultMsg.className = 'msg success';
+        resultMsg.textContent = 'ההרשמה נקלטה בהצלחה!';
       } catch (err) {
-        msg.className = 'msg error';
-        msg.textContent = err.message || 'שגיאה בהרשמה, נסו שוב.';
-        msg.style.display = 'block';
-        submitBtn.disabled = false;
+        resultMsg.className = 'msg error';
+        resultMsg.textContent = err.message || 'שגיאה בהרשמה, נסו שוב.';
       }
+
+      fields.style.display = 'none';
+      result.style.display = 'block';
+      submitBtn.disabled = false;
+    });
+
+    result.querySelector('.btn-close-result').addEventListener('click', () => {
+      loadEvents();
     });
   });
 }
