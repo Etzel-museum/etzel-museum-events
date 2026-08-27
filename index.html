@@ -69,7 +69,7 @@ async function loadEvents() {
     const card = document.createElement('div');
     card.className = 'event-card';
 
-    const sessionsSnap = await getDocs(query(collection(db, 'events', eventDoc.id, 'sessions'), orderBy('date'), orderBy('time')));
+    const sessionsSnap = await getDocs(query(collection(db, 'events', eventDoc.id, 'sessions'), orderBy('dateTime')));
 
     let sessionsHtml = '';
     sessionsSnap.forEach(sDoc => {

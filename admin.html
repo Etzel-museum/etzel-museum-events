@@ -139,7 +139,7 @@ async function loadEvents() {
     const card = document.createElement('div');
     card.className = 'card';
 
-    const sessionsSnap = await getDocs(query(collection(db, 'events', eventId, 'sessions'), orderBy('date'), orderBy('time')));
+    const sessionsSnap = await getDocs(query(collection(db, 'events', eventId, 'sessions'), orderBy('dateTime')));
     let sessionsHtml = '';
     sessionsSnap.forEach(sDoc => {
       const s = sDoc.data();
@@ -203,7 +203,7 @@ function attachEventHandlers() {
       const date = form.date.value;
       const time = form.time.value;
       const capacity = parseInt(form.capacity.value, 10);
-      await addDoc(collection(db, 'events', eventId, 'sessions'), { date, time, capacity, registeredCount: 0 });
+      await addDoc(collection(db, 'events', eventId, 'sessions'), { date, time, dateTime: `${date}T${time}`, capacity, registeredCount: 0 });
       loadEvents();
     });
   });
