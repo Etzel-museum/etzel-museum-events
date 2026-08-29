@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
 <title>ניהול אירועים - מוזיאון האצ"ל</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root { --accent: #0e1b2e; --accent-light: #b8874e; --bg: #f6f5f2; --card-bg: #fff; --text: #222; --muted: #666; --danger: #a4332c; }
   * { box-sizing: border-box; }
@@ -87,7 +88,51 @@
       </form>
     </div>
 
+    <div class="card">
+      <h2>ייבוא נרשמים מקובץ אקסל (בוט)</h2>
+      <p class="muted">קובץ שבו כל הפרטים (שם/טלפון/אימייל) מבולגנים באותה משבצת - האתר ינסה לזהות אותם לבד.</p>
+      <label>קובץ</label>
+      <input type="file" id="importEventFile" accept=".xlsx,.xls,.csv">
+      <div class="row">
+        <div><label>לאיזה אירוע</label><select id="importEventSelect"></select></div>
+        <div><label>לאיזה סבב</label><select id="importSessionSelect"></select></div>
+      </div>
+      <div class="actions"><button type="button" class="btn-primary" id="parseEventFileBtn">פענח קובץ</button></div>
+      <div class="msg error hidden" id="importEventMsg"></div>
+      <div id="importEventPreview"></div>
+    </div>
+
     <div id="eventsList"></div>
+
+    <div class="card">
+      <h2>חברי מוזיאון</h2>
+      <form id="newMemberForm">
+        <div class="row">
+          <div><label>שם מלא</label><input type="text" id="newMemberName" required></div>
+          <div><label>טלפון</label><input type="tel" id="newMemberPhone" required></div>
+          <div><label>אימייל (אופציונלי)</label><input type="email" id="newMemberEmail"></div>
+        </div>
+        <div class="actions"><button type="submit" class="btn-primary">הוסף חבר</button></div>
+        <div class="msg error hidden" id="newMemberMsg"></div>
+      </form>
+
+      <hr style="margin:20px 0; border:0; border-top:1px solid #eee;">
+      <h3>ייבוא מקובץ אקסל</h3>
+      <label>קובץ</label>
+      <input type="file" id="importMembersFile" accept=".xlsx,.xls,.csv">
+      <div class="actions"><button type="button" class="btn-primary" id="parseMembersFileBtn">פענח קובץ</button></div>
+      <div class="msg error hidden" id="importMembersMsg"></div>
+      <div id="importMembersPreview"></div>
+
+      <div class="actions" style="margin-top:20px;">
+        <button type="button" class="btn-secondary" id="copyEmailsBtn">העתק כל האימיילים</button>
+        <button type="button" class="btn-secondary" id="copyPhonesBtn">העתק כל הטלפונים</button>
+        <button type="button" class="btn-secondary" id="exportMembersCsvBtn">ייצוא CSV</button>
+      </div>
+      <div class="msg success hidden" id="membersCopyMsg"></div>
+
+      <div id="membersList" style="margin-top:16px;"></div>
+    </div>
   </div>
 </main>
 
@@ -97,7 +142,7 @@ import {
   onAuthStateChanged, signInWithEmailAndPassword, signOut
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
-  collection, getDocs, addDoc, deleteDoc, doc, updateDoc, runTransaction, query, orderBy, serverTimestamp
+  collection, getDocs, getDoc, setDoc, addDoc, deleteDoc, doc, updateDoc, runTransaction, query, orderBy, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const loginScreen = document.getElementById('loginScreen');
@@ -110,6 +155,7 @@ onAuthStateChanged(auth, user => {
     dashboard.classList.remove('hidden');
     signOutBtn.classList.remove('hidden');
     loadEvents();
+    loadMembers();
   } else {
     loginScreen.classList.remove('hidden');
     dashboard.classList.add('hidden');
@@ -178,6 +224,23 @@ document.getElementById('newEventForm').addEventListener('submit', async (e) => 
     submitBtn.disabled = false;
     submitBtn.textContent = 'צור אירוע';
   }
+});
+
+document.getElementById('newMemberForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = document.getElementById('newMemberName').value.trim();
+  const phone = document.getElementById('newMemberPhone').value.trim();
+  const email = document.getElementById('newMemberEmail').value.trim();
+  const msg = document.getElementById('newMemberMsg');
+  msg.classList.add('hidden');
+  const added = await addMember({ name, phone, email });
+  if (!added) {
+    msg.textContent = 'חבר עם השם והטלפון האלה כבר קיים ברשימה.';
+    msg.classList.remove('hidden');
+    return;
+  }
+  document.getElementById('newMemberForm').reset();
+  loadMembers();
 });
 
 async function loadEvents() {
@@ -285,7 +348,30 @@ async function loadEvents() {
         </div>
       `).join('');
 
+  await populateImportEventSelect(eventsSnap.docs);
   attachEventHandlers();
+}
+
+async function populateImportEventSelect(eventDocs) {
+  const eventSelect = document.getElementById('importEventSelect');
+  const sessionSelect = document.getElementById('importSessionSelect');
+  const currentValue = eventSelect.value;
+
+  eventSelect.innerHTML = eventDocs.map(d => `<option value="${d.id}">${escapeHtml(d.data().title)}</option>`).join('');
+  if (currentValue && eventDocs.some(d => d.id === currentValue)) eventSelect.value = currentValue;
+
+  async function refreshSessions() {
+    const eventId = eventSelect.value;
+    if (!eventId) { sessionSelect.innerHTML = ''; return; }
+    const sessionsSnap = await getDocs(query(collection(db, 'events', eventId, 'sessions'), orderBy('dateTime')));
+    sessionSelect.innerHTML = sessionsSnap.docs.map(d => {
+      const s = d.data();
+      return `<option value="${d.id}">${formatDate(s.date)} · ${escapeHtml(s.time)} (${s.registeredCount || 0}/${s.capacity})</option>`;
+    }).join('') || '<option value="">אין סבבים לאירוע זה</option>';
+  }
+
+  eventSelect.onchange = refreshSessions;
+  if (eventDocs.length > 0) await refreshSessions();
 }
 
 function nowDateTimeString() {
@@ -537,15 +623,23 @@ function attachEventHandlers() {
       if (regs.length === 0) {
         regsContainer.innerHTML = '<p class="muted">אין נרשמים עדיין.</p>';
       } else {
-        let rows = regs.map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.phone)}</td><td>${escapeHtml(r.phone2)}</td><td>${escapeHtml(r.email)}</td><td>${r.partySize}</td></tr>`).join('');
+        let rows = regs.map((r, i) => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.phone)}</td><td>${escapeHtml(r.phone2)}</td><td>${escapeHtml(r.email)}</td><td>${r.partySize}</td><td><button type="button" class="btn-secondary btn-add-member-from-reg" data-i="${i}" style="padding:4px 10px; font-size:0.85em;">הוסף לחברים</button></td></tr>`).join('');
         regsContainer.innerHTML = `
           <table>
-            <thead><tr><th>שם</th><th>טלפון</th><th>טלפון נוסף</th><th>אימייל</th><th>כמות</th></tr></thead>
+            <thead><tr><th>שם</th><th>טלפון</th><th>טלפון נוסף</th><th>אימייל</th><th>כמות</th><th></th></tr></thead>
             <tbody>${rows}</tbody>
           </table>
           <button class="btn-secondary btn-export-csv" style="margin-top:10px;">ייצוא CSV</button>
         `;
         regsContainer.querySelector('.btn-export-csv').addEventListener('click', () => exportCsv(regs));
+        regsContainer.querySelectorAll('.btn-add-member-from-reg').forEach(b => {
+          b.addEventListener('click', async () => {
+            const r = regs[parseInt(b.dataset.i, 10)];
+            await addMember({ name: r.name, phone: r.phone, email: r.email || '' });
+            b.textContent = 'נוסף ✓';
+            b.disabled = true;
+          });
+        });
       }
       regsContainer.dataset.loaded = '1';
     });
@@ -625,18 +719,237 @@ async function renderWaitlist(item, wlContainer) {
   });
 }
 
+// ---- Excel/CSV import (bot export dumps name+phone+email jumbled into one cell) ----
+
+function parseImportRow(cells) {
+  const text = cells.map(c => (c === undefined || c === null ? '' : String(c))).join(' ');
+  const emailMatch = text.match(/[^\s,;]+@[^\s,;]+\.[^\s,;]+/);
+  const email = emailMatch ? emailMatch[0] : '';
+  let rest = email ? text.replace(email, ' ') : text;
+  const phoneMatch = rest.match(/(\+?\d[\d\-\s]{6,}\d)/);
+  const phoneRaw = phoneMatch ? phoneMatch[0] : '';
+  const phone = phoneRaw.replace(/[^\d+]/g, '');
+  rest = phoneRaw ? rest.replace(phoneRaw, ' ') : rest;
+  const name = rest.replace(/[,;|]/g, ' ').replace(/\s+/g, ' ').trim();
+  return { name, phone, email };
+}
+
+function parseImportFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const wb = XLSX.read(e.target.result, { type: 'array' });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+        const parsed = rows.map(parseImportRow).filter(p => p.name || p.phone || p.email);
+        resolve(parsed);
+      } catch (err) { reject(err); }
+    };
+    reader.onerror = () => reject(new Error('קריאת הקובץ נכשלה.'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function renderImportPreview(container, rows, importLabel, onImport) {
+  container.innerHTML = `
+    <table style="margin-top:16px;">
+      <thead><tr><th></th><th>שם</th><th>טלפון</th><th>אימייל</th></tr></thead>
+      <tbody>${rows.map((r, i) => `
+        <tr data-i="${i}">
+          <td><input type="checkbox" class="import-row-check" checked></td>
+          <td><input type="text" class="import-row-name" value="${escapeHtml(r.name)}" style="min-width:120px;"></td>
+          <td><input type="text" class="import-row-phone" value="${escapeHtml(r.phone)}" style="min-width:110px;"></td>
+          <td><input type="text" class="import-row-email" value="${escapeHtml(r.email)}" style="min-width:160px;"></td>
+        </tr>
+      `).join('')}</tbody>
+    </table>
+    <div class="actions" style="margin-top:14px;">
+      <button type="button" class="btn-primary" id="confirmImportBtn">${importLabel}</button>
+    </div>
+    <div id="importResultMsg" class="msg" style="display:none;"></div>
+  `;
+
+  container.querySelector('#confirmImportBtn').addEventListener('click', async () => {
+    const btn = container.querySelector('#confirmImportBtn');
+    btn.disabled = true;
+    const selected = [];
+    container.querySelectorAll('tbody tr').forEach(tr => {
+      if (!tr.querySelector('.import-row-check').checked) return;
+      selected.push({
+        name: tr.querySelector('.import-row-name').value.trim(),
+        phone: tr.querySelector('.import-row-phone').value.trim(),
+        email: tr.querySelector('.import-row-email').value.trim()
+      });
+    });
+    const result = await onImport(selected);
+    const msg = container.querySelector('#importResultMsg');
+    msg.className = 'msg success';
+    msg.style.display = 'block';
+    msg.textContent = `נוספו: ${result.added} | כבר היו קיימים: ${result.duplicate} | נכשלו: ${result.failed}`;
+    btn.disabled = false;
+  });
+}
+
+async function registerPerson(eventId, sessionId, { name, phone, email, partySize }) {
+  const sessionRef = doc(db, 'events', eventId, 'sessions', sessionId);
+  const regRef = doc(db, 'events', eventId, 'sessions', sessionId, 'registrations', registrationId(sessionId, name, phone));
+  await runTransaction(db, async (tx) => {
+    const [sessionSnap, regSnap] = [await tx.get(sessionRef), await tx.get(regRef)];
+    if (regSnap.exists()) throw new Error('duplicate');
+    const data = sessionSnap.data();
+    const newCount = (data.registeredCount || 0) + partySize;
+    if (newCount > data.capacity) throw new Error('capacity');
+    tx.update(sessionRef, { registeredCount: newCount });
+    tx.set(regRef, { name, phone, email: email || '', phone2: '', partySize, createdAt: serverTimestamp() });
+  });
+}
+
+document.getElementById('parseEventFileBtn').addEventListener('click', async () => {
+  const fileInput = document.getElementById('importEventFile');
+  const msg = document.getElementById('importEventMsg');
+  const preview = document.getElementById('importEventPreview');
+  msg.classList.add('hidden');
+  preview.innerHTML = '';
+  const file = fileInput.files[0];
+  if (!file) { msg.textContent = 'בחר קובץ קודם.'; msg.classList.remove('hidden'); return; }
+
+  try {
+    const rows = await parseImportFile(file);
+    if (rows.length === 0) { msg.textContent = 'לא נמצאו שורות בקובץ.'; msg.classList.remove('hidden'); return; }
+
+    renderImportPreview(preview, rows, 'ייבא את הנבחרים כהרשמות', async (selected) => {
+      const eventId = document.getElementById('importEventSelect').value;
+      const sessionId = document.getElementById('importSessionSelect').value;
+      let added = 0, duplicate = 0, failed = 0;
+      for (const p of selected) {
+        if (!p.name || !p.phone) { failed++; continue; }
+        try {
+          await registerPerson(eventId, sessionId, { ...p, partySize: 1 });
+          added++;
+        } catch (e) {
+          if (e.message === 'duplicate') duplicate++; else failed++;
+        }
+      }
+      loadEvents();
+      return { added, duplicate, failed };
+    });
+  } catch (err) {
+    msg.textContent = 'שגיאה בקריאת הקובץ: ' + err.message;
+    msg.classList.remove('hidden');
+  }
+});
+
+document.getElementById('parseMembersFileBtn').addEventListener('click', async () => {
+  const fileInput = document.getElementById('importMembersFile');
+  const msg = document.getElementById('importMembersMsg');
+  const preview = document.getElementById('importMembersPreview');
+  msg.classList.add('hidden');
+  preview.innerHTML = '';
+  const file = fileInput.files[0];
+  if (!file) { msg.textContent = 'בחר קובץ קודם.'; msg.classList.remove('hidden'); return; }
+
+  try {
+    const rows = await parseImportFile(file);
+    if (rows.length === 0) { msg.textContent = 'לא נמצאו שורות בקובץ.'; msg.classList.remove('hidden'); return; }
+
+    renderImportPreview(preview, rows, 'ייבא את הנבחרים כחברים', async (selected) => {
+      let added = 0, duplicate = 0, failed = 0;
+      for (const p of selected) {
+        if (!p.name || !p.phone) { failed++; continue; }
+        const ok = await addMember(p);
+        if (ok) added++; else duplicate++;
+      }
+      loadMembers();
+      return { added, duplicate, failed };
+    });
+  } catch (err) {
+    msg.textContent = 'שגיאה בקריאת הקובץ: ' + err.message;
+    msg.classList.remove('hidden');
+  }
+});
+
 function exportCsv(regs) {
   const esc = (v) => `"${(v || '').replace(/"/g, '""')}"`;
   const header = 'שם,טלפון,טלפון נוסף,אימייל,כמות\n';
   const rows = regs.map(r => `${esc(r.name)},${esc(r.phone)},${esc(r.phone2)},${esc(r.email)},${r.partySize}`).join('\n');
-  const csv = '﻿' + header + rows;
+  downloadCsv('נרשמים.csv', header + rows);
+}
+
+function downloadCsv(filename, body) {
+  const csv = '﻿' + body;
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'נרשמים.csv';
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function memberId(name, phone) {
+  return hashString(`member|${normalizeName(name)}|${normalizePhone(phone)}`);
+}
+
+async function addMember({ name, phone, email }) {
+  const ref = doc(db, 'members', memberId(name, phone));
+  const snap = await getDoc(ref);
+  if (snap.exists()) return false;
+  await setDoc(ref, { name, phone, email: email || '', createdAt: serverTimestamp() });
+  return true;
+}
+
+async function loadMembers() {
+  const list = document.getElementById('membersList');
+  const snap = await getDocs(query(collection(db, 'members'), orderBy('createdAt', 'desc')));
+  const members = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+  if (members.length === 0) {
+    list.innerHTML = '<p class="muted">אין עדיין חברים ברשימה.</p>';
+    return;
+  }
+
+  list.innerHTML = `
+    <table>
+      <thead><tr><th>שם</th><th>טלפון</th><th>אימייל</th><th></th></tr></thead>
+      <tbody>${members.map(m => `
+        <tr data-id="${m.id}">
+          <td>${escapeHtml(m.name)}</td><td>${escapeHtml(m.phone)}</td><td>${escapeHtml(m.email)}</td>
+          <td><button type="button" class="btn-danger btn-delete-member" style="padding:4px 10px; font-size:0.85em;">מחק</button></td>
+        </tr>
+      `).join('')}</tbody>
+    </table>
+  `;
+
+  list.querySelectorAll('.btn-delete-member').forEach(b => {
+    b.addEventListener('click', async () => {
+      await deleteDoc(doc(db, 'members', b.closest('tr').dataset.id));
+      loadMembers();
+    });
+  });
+
+  document.getElementById('copyEmailsBtn').onclick = () => copyMemberField(members, 'email');
+  document.getElementById('copyPhonesBtn').onclick = () => copyMemberField(members, 'phone');
+  document.getElementById('exportMembersCsvBtn').onclick = () => {
+    const esc = (v) => `"${(v || '').replace(/"/g, '""')}"`;
+    const header = 'שם,טלפון,אימייל\n';
+    const rows = members.map(m => `${esc(m.name)},${esc(m.phone)},${esc(m.email)}`).join('\n');
+    downloadCsv('חברי_מוזיאון.csv', header + rows);
+  };
+}
+
+async function copyMemberField(members, field) {
+  const values = members.map(m => m[field]).filter(Boolean);
+  const text = values.join(', ');
+  const msg = document.getElementById('membersCopyMsg');
+  try {
+    await navigator.clipboard.writeText(text);
+    msg.textContent = `${values.length} ${field === 'email' ? 'כתובות אימייל' : 'מספרי טלפון'} הועתקו ללוח.`;
+  } catch (e) {
+    msg.textContent = text;
+  }
+  msg.classList.remove('hidden');
+  setTimeout(() => msg.classList.add('hidden'), 4000);
 }
 
 function formatDate(dateStr) {

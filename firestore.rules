@@ -49,5 +49,11 @@ service cloud.firestore {
         }
       }
     }
+
+    match /members/{memberId} {
+      // Admin-only in every direction - not tied to any event, no public
+      // access is needed at all.
+      allow read, write: if request.auth != null;
+    }
   }
 }
