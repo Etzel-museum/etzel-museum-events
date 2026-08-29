@@ -131,10 +131,9 @@
         <p class="muted">קובץ שבו כל הפרטים (שם/טלפון/אימייל) מבולגנים באותה משבצת - האתר ינסה לזהות אותם לבד.</p>
         <label>קובץ</label>
         <input type="file" id="importEventFile" accept=".xlsx,.xls,.csv">
-        <div class="row">
-          <div><label>לאיזה אירוע</label><select id="importEventSelect"></select></div>
-          <div><label>לאיזה סבב</label><select id="importSessionSelect"></select></div>
-        </div>
+        <label>לאיזה אירוע</label>
+        <select id="importEventSelect"></select>
+        <p class="muted">אם בקובץ מופיעה שעה (כמו 20:30 או 2030), האתר ינסה לשייך כל שורה לסבב המתאים באירוע לבד - ותמיד אפשר לתקן ידנית בתצוגה המקדימה.</p>
         <div class="actions"><button type="button" class="btn-primary" id="parseEventFileBtn">פענח קובץ</button></div>
         <div class="msg error hidden" id="importEventMsg"></div>
         <div id="importEventPreview"></div>
@@ -375,30 +374,15 @@ async function loadEvents() {
         </div>
       `).join('');
 
-  await populateImportEventSelect(eventsSnap.docs);
+  populateImportEventSelect(eventsSnap.docs);
   attachEventHandlers();
 }
 
-async function populateImportEventSelect(eventDocs) {
+function populateImportEventSelect(eventDocs) {
   const eventSelect = document.getElementById('importEventSelect');
-  const sessionSelect = document.getElementById('importSessionSelect');
   const currentValue = eventSelect.value;
-
   eventSelect.innerHTML = eventDocs.map(d => `<option value="${d.id}">${escapeHtml(d.data().title)}</option>`).join('');
   if (currentValue && eventDocs.some(d => d.id === currentValue)) eventSelect.value = currentValue;
-
-  async function refreshSessions() {
-    const eventId = eventSelect.value;
-    if (!eventId) { sessionSelect.innerHTML = ''; return; }
-    const sessionsSnap = await getDocs(query(collection(db, 'events', eventId, 'sessions'), orderBy('dateTime')));
-    sessionSelect.innerHTML = sessionsSnap.docs.map(d => {
-      const s = d.data();
-      return `<option value="${d.id}">${formatDate(s.date)} · ${escapeHtml(s.time)} (${s.registeredCount || 0}/${s.capacity})</option>`;
-    }).join('') || '<option value="">אין סבבים לאירוע זה</option>';
-  }
-
-  eventSelect.onchange = refreshSessions;
-  if (eventDocs.length > 0) await refreshSessions();
 }
 
 function nowDateTimeString() {
@@ -748,6 +732,14 @@ async function renderWaitlist(item, wlContainer) {
 
 // ---- Excel/CSV import (bot export dumps name+phone+email jumbled into one cell) ----
 
+function extractTime(text) {
+  const colonMatch = text.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
+  if (colonMatch) return { time: `${colonMatch[1].padStart(2, '0')}:${colonMatch[2]}`, raw: colonMatch[0] };
+  const digitMatch = text.match(/\b([01]\d|2[0-3])([0-5]\d)\b/);
+  if (digitMatch) return { time: `${digitMatch[1]}:${digitMatch[2]}`, raw: digitMatch[0] };
+  return null;
+}
+
 function parseImportRow(cells) {
   const text = cells.map(c => (c === undefined || c === null ? '' : String(c))).join(' ');
   const emailMatch = text.match(/[^\s,;]+@[^\s,;]+\.[^\s,;]+/);
@@ -757,8 +749,13 @@ function parseImportRow(cells) {
   const phoneRaw = phoneMatch ? phoneMatch[0] : '';
   const phone = phoneRaw.replace(/[^\d+]/g, '');
   rest = phoneRaw ? rest.replace(phoneRaw, ' ') : rest;
-  const name = rest.replace(/[,;|]/g, ' ').replace(/\s+/g, ' ').trim();
-  return { name, phone, email };
+
+  const timeInfo = extractTime(rest);
+  const time = timeInfo ? timeInfo.time : '';
+  if (timeInfo) rest = rest.replace(timeInfo.raw, ' ');
+
+  const name = rest.replace(/[,;|:]/g, ' ').replace(/\s+/g, ' ').trim();
+  return { name, phone, email, time };
 }
 
 function parseImportFile(file) {
@@ -778,16 +775,22 @@ function parseImportFile(file) {
   });
 }
 
-function renderImportPreview(container, rows, importLabel, onImport) {
+function renderImportPreview(container, rows, importLabel, onImport, sessions) {
+  const sessionColumn = !!sessions;
+  const sessionOptions = sessions ? sessions.map(s =>
+    `<option value="${s.id}">${formatDate(s.date)} · ${escapeHtml(s.time)} (${s.registeredCount || 0}/${s.capacity})</option>`
+  ).join('') : '';
+
   container.innerHTML = `
     <table style="margin-top:16px;">
-      <thead><tr><th></th><th>שם</th><th>טלפון</th><th>אימייל</th></tr></thead>
+      <thead><tr><th></th><th>שם</th><th>טלפון</th><th>אימייל</th>${sessionColumn ? '<th>סבב</th>' : ''}</tr></thead>
       <tbody>${rows.map((r, i) => `
         <tr data-i="${i}">
           <td><input type="checkbox" class="import-row-check" checked></td>
           <td><input type="text" class="import-row-name" value="${escapeHtml(r.name)}" style="min-width:120px;"></td>
           <td><input type="text" class="import-row-phone" value="${escapeHtml(r.phone)}" style="min-width:110px;"></td>
           <td><input type="text" class="import-row-email" value="${escapeHtml(r.email)}" style="min-width:160px;"></td>
+          ${sessionColumn ? `<td><select class="import-row-session" style="min-width:180px;">${sessionOptions}</select></td>` : ''}
         </tr>
       `).join('')}</tbody>
     </table>
@@ -797,17 +800,28 @@ function renderImportPreview(container, rows, importLabel, onImport) {
     <div id="importResultMsg" class="msg" style="display:none;"></div>
   `;
 
+  if (sessionColumn) {
+    container.querySelectorAll('tbody tr').forEach((tr, i) => {
+      const detectedTime = rows[i].time;
+      if (!detectedTime) return;
+      const match = sessions.find(s => s.time === detectedTime);
+      if (match) tr.querySelector('.import-row-session').value = match.id;
+    });
+  }
+
   container.querySelector('#confirmImportBtn').addEventListener('click', async () => {
     const btn = container.querySelector('#confirmImportBtn');
     btn.disabled = true;
     const selected = [];
     container.querySelectorAll('tbody tr').forEach(tr => {
       if (!tr.querySelector('.import-row-check').checked) return;
-      selected.push({
+      const person = {
         name: tr.querySelector('.import-row-name').value.trim(),
         phone: tr.querySelector('.import-row-phone').value.trim(),
         email: tr.querySelector('.import-row-email').value.trim()
-      });
+      };
+      if (sessionColumn) person.sessionId = tr.querySelector('.import-row-session').value;
+      selected.push(person);
     });
     const result = await onImport(selected);
     const msg = container.querySelector('#importResultMsg');
@@ -841,18 +855,23 @@ document.getElementById('parseEventFileBtn').addEventListener('click', async () 
   const file = fileInput.files[0];
   if (!file) { msg.textContent = 'בחר קובץ קודם.'; msg.classList.remove('hidden'); return; }
 
+  const eventId = document.getElementById('importEventSelect').value;
+  if (!eventId) { msg.textContent = 'בחר אירוע קודם.'; msg.classList.remove('hidden'); return; }
+
   try {
     const rows = await parseImportFile(file);
     if (rows.length === 0) { msg.textContent = 'לא נמצאו שורות בקובץ.'; msg.classList.remove('hidden'); return; }
 
+    const sessionsSnap = await getDocs(query(collection(db, 'events', eventId, 'sessions'), orderBy('dateTime')));
+    const sessions = sessionsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (sessions.length === 0) { msg.textContent = 'לאירוע הזה אין עדיין סבבים - הוסף סבב קודם.'; msg.classList.remove('hidden'); return; }
+
     renderImportPreview(preview, rows, 'ייבא את הנבחרים כהרשמות', async (selected) => {
-      const eventId = document.getElementById('importEventSelect').value;
-      const sessionId = document.getElementById('importSessionSelect').value;
       let added = 0, duplicate = 0, failed = 0;
       for (const p of selected) {
-        if (!p.name || !p.phone) { failed++; continue; }
+        if (!p.name || !p.phone || !p.sessionId) { failed++; continue; }
         try {
-          await registerPerson(eventId, sessionId, { ...p, partySize: 1 });
+          await registerPerson(eventId, p.sessionId, { ...p, partySize: 1 });
           added++;
         } catch (e) {
           if (e.message === 'duplicate') duplicate++; else failed++;
@@ -860,7 +879,7 @@ document.getElementById('parseEventFileBtn').addEventListener('click', async () 
       }
       loadEvents();
       return { added, duplicate, failed };
-    });
+    }, sessions);
   } catch (err) {
     msg.textContent = 'שגיאה בקריאת הקובץ: ' + err.message;
     msg.classList.remove('hidden');
