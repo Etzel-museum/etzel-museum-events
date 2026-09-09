@@ -449,11 +449,30 @@ function renderSessionItem(eventId, sessionId, s) {
   `;
 }
 
+async function deleteSessionCascade(eventId, sessionId) {
+  const regsSnap = await getDocs(collection(db, 'events', eventId, 'sessions', sessionId, 'registrations'));
+  const wlSnap = await getDocs(collection(db, 'events', eventId, 'sessions', sessionId, 'waitlist'));
+  await Promise.all([
+    ...regsSnap.docs.map(r => deleteDoc(r.ref)),
+    ...wlSnap.docs.map(w => deleteDoc(w.ref))
+  ]);
+  await deleteDoc(doc(db, 'events', eventId, 'sessions', sessionId));
+}
+
+async function deleteEventCascade(eventId) {
+  const sessionsSnap = await getDocs(collection(db, 'events', eventId, 'sessions'));
+  for (const s of sessionsSnap.docs) {
+    await deleteSessionCascade(eventId, s.id);
+  }
+  await deleteDoc(doc(db, 'events', eventId));
+}
+
 function attachEventHandlers() {
   document.querySelectorAll('.btn-delete-event').forEach(btn => {
     btn.addEventListener('click', async () => {
-      if (!confirm('למחוק את האירוע? פעולה זו לא הופכת.')) return;
-      await deleteDoc(doc(db, 'events', btn.dataset.event));
+      if (!confirm('למחוק את האירוע? כל הסבבים, ההרשמות ורשימות ההמתנה שלו יימחקו גם הם. פעולה זו לא הופכת.')) return;
+      btn.disabled = true;
+      await deleteEventCascade(btn.dataset.event);
       loadEvents();
     });
   });
@@ -525,10 +544,8 @@ function attachEventHandlers() {
   document.querySelectorAll('.btn-delete-session').forEach(btn => {
     btn.addEventListener('click', async () => {
       const item = btn.closest('.session-item');
-      if (!confirm('למחוק את הסבב? כל ההרשמות אליו יימחקו גם הן.')) return;
-      const regsSnap = await getDocs(collection(db, 'events', item.dataset.event, 'sessions', item.dataset.session, 'registrations'));
-      await Promise.all(regsSnap.docs.map(r => deleteDoc(r.ref)));
-      await deleteDoc(doc(db, 'events', item.dataset.event, 'sessions', item.dataset.session));
+      if (!confirm('למחוק את הסבב? כל ההרשמות ורשימת ההמתנה שלו יימחקו גם הן.')) return;
+      await deleteSessionCascade(item.dataset.event, item.dataset.session);
       loadEvents();
     });
   });
