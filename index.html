@@ -75,8 +75,23 @@
     margin-top: 40px; background: var(--etzel-gold); color: #2c2c1a; text-align: center;
     padding: 34px 20px 38px; border-top: 5px solid var(--etzel-blue);
   }
-  .footer-logo { height: 70px; margin-bottom: 14px; }
+  .footer-logo { height: 70px; margin-bottom: 22px; }
   .footer-details { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; font-weight: 600; font-size: 0.92em; }
+
+  .footer-grid {
+    max-width: 760px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+    text-align: center; border-top: 1px solid rgba(44,44,26,0.15); padding-top: 24px;
+  }
+  .footer-col h3 { margin: 0 0 8px; font-size: 0.95em; text-transform: uppercase; letter-spacing: 0.04em; }
+  .footer-col p { margin: 0 0 4px; font-size: 0.88em; }
+  .footer-col a { color: #2c2c1a; font-weight: 700; text-decoration: none; }
+  .footer-col a:hover { text-decoration: underline; }
+  @media (max-width: 560px) { .footer-grid { grid-template-columns: 1fr; } }
+
+  .footer-social { display: flex; justify-content: center; gap: 14px; margin-top: 26px; }
+  .footer-social a { color: #2c2c1a; opacity: 0.85; }
+  .footer-social a:hover { opacity: 1; }
+  .footer-social svg { width: 22px; height: 22px; fill: currentColor; }
 
   .skeleton-card { background: var(--card-bg); border: 1px solid #e4e0d3; overflow: hidden; margin-bottom: 28px; }
   .skeleton-block { background: linear-gradient(90deg, #ece7dd 25%, #f6f3ec 50%, #ece7dd 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
@@ -123,9 +138,35 @@
 
 <footer class="site-footer">
   <img class="footer-logo" src="site-contact-logo.png" alt="מוזיאון האצ״ל">
-  <div class="footer-details">
-    <span>המלך ג'ורג' 38, תל אביב-יפו</span>
-    <span>03-528-4001</span>
+
+  <div class="footer-grid">
+    <div class="footer-col">
+      <h3>יצירת קשר</h3>
+      <p>המלך ג'ורג' 38, תל אביב-יפו</p>
+      <p><bdi dir="ltr"><a href="tel:035284001">03-528-4001</a></bdi> · <bdi dir="ltr"><a href="tel:035253307">03-525-3307</a></bdi></p>
+      <p><a href="mailto:Etzelmuseum.kg@gmail.com">Etzelmuseum.kg@gmail.com</a></p>
+    </div>
+    <div class="footer-col">
+      <h3>שעות ביקור</h3>
+      <p>א'-ה': <bdi dir="ltr">08:00-16:00</bdi></p>
+      <p>שישי-שבת: סגור</p>
+      <p>לתיאום סיורים: <bdi dir="ltr"><a href="tel:035284001">03-528-4001</a></bdi></p>
+    </div>
+    <div class="footer-col">
+      <h3>מחירון</h3>
+      <p>מבוגר — 20 ₪</p>
+      <p>נוער / אזרח ותיק / גמלאי צה"ל / סטודנט — 15 ₪</p>
+      <p>נכה ביטוח לאומי — 10 ₪</p>
+    </div>
+  </div>
+
+  <div class="footer-social">
+    <a href="https://www.facebook.com/share/1ENV8hF1v1/" target="_blank" rel="noopener" aria-label="פייסבוק">
+      <svg viewBox="0 0 24 24"><path d="M22 12.06C22 6.48 17.52 2 11.94 2S1.88 6.48 1.88 12.06c0 5.05 3.66 9.23 8.44 9.94v-7.03H7.9v-2.91h2.42V9.85c0-2.39 1.42-3.71 3.6-3.71 1.04 0 2.13.19 2.13.19v2.35h-1.2c-1.18 0-1.55.74-1.55 1.5v1.8h2.64l-.42 2.91h-2.22V22c4.78-.71 8.44-4.89 8.44-9.94z"/></svg>
+    </a>
+    <a href="https://www.instagram.com/etzel_museum" target="_blank" rel="noopener" aria-label="אינסטגרם">
+      <svg viewBox="0 0 24 24"><path d="M12 2c2.72 0 3.06.01 4.12.06 1.06.05 1.79.22 2.43.47.66.26 1.22.6 1.77 1.16.56.55.9 1.11 1.16 1.77.25.64.42 1.37.47 2.43.05 1.06.06 1.4.06 4.12s-.01 3.06-.06 4.12c-.05 1.06-.22 1.79-.47 2.43a4.9 4.9 0 0 1-1.16 1.77 4.9 4.9 0 0 1-1.77 1.16c-.64.25-1.37.42-2.43.47-1.06.05-1.4.06-4.12.06s-3.06-.01-4.12-.06c-1.06-.05-1.79-.22-2.43-.47a4.9 4.9 0 0 1-1.77-1.16 4.9 4.9 0 0 1-1.16-1.77c-.25-.64-.42-1.37-.47-2.43C2.01 15.06 2 14.72 2 12s.01-3.06.06-4.12c.05-1.06.22-1.79.47-2.43.26-.66.6-1.22 1.16-1.77A4.9 4.9 0 0 1 5.46.52c.64-.25 1.37-.42 2.43-.47C8.94 2.01 9.28 2 12 2zm0 1.8c-2.67 0-2.99.01-4.04.06-.87.04-1.34.18-1.65.3-.42.16-.72.36-1.03.67-.31.31-.51.61-.67 1.03-.12.31-.26.78-.3 1.65C4.26 8.75 4.25 9.07 4.25 12s.01 3.25.06 4.3c.04.87.18 1.34.3 1.65.16.42.36.72.67 1.03.31.31.61.51 1.03.67.31.12.78.26 1.65.3 1.05.05 1.37.06 4.04.06s2.99-.01 4.04-.06c.87-.04 1.34-.18 1.65-.3.42-.16.72-.36 1.03-.67.31-.31.51-.61.67-1.03.12-.31.26-.78.3-1.65.05-1.05.06-1.37.06-4.3s-.01-3.25-.06-4.3c-.04-.87-.18-1.34-.3-1.65a2.78 2.78 0 0 0-.67-1.03 2.78 2.78 0 0 0-1.03-.67c-.31-.12-.78-.26-1.65-.3-1.05-.05-1.37-.06-4.04-.06zm0 3.06a5.14 5.14 0 1 1 0 10.28 5.14 5.14 0 0 1 0-10.28zm0 1.8a3.34 3.34 0 1 0 0 6.68 3.34 3.34 0 0 0 0-6.68zm5.34-1.99a1.2 1.2 0 1 1-2.4 0 1.2 1.2 0 0 1 2.4 0z"/></svg>
+    </a>
   </div>
 </footer>
 
