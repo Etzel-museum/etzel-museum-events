@@ -26,7 +26,7 @@
   .hero-logo { height: 58px; }
   .hero p { margin: 6px 0 0; color: #2c2c1a; font-size: 0.92em; font-weight: 600; }
 
-  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 60px; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 60px; min-height: 40vh; }
 
   @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
   .event-card { background: var(--card-bg); border: 1px solid #e4e0d3; border-top: 4px solid var(--etzel-gold); margin-bottom: 28px; animation: fadeInUp 0.4s ease-out backwards; }
@@ -65,6 +65,11 @@
   .msg.success { background: #eaf3e3; color: #3f6b2c; }
 
   .empty-state { text-align: center; color: var(--muted); padding: 60px 20px; }
+  .empty-state-main { padding: 70px 20px; }
+  .empty-state-main .icon-lg { width: 44px; height: 44px; fill: #d8d5c4; margin-bottom: 14px; }
+  .empty-state-main p { margin: 0 0 6px; font-size: 1.05em; }
+  .empty-state-main a { color: var(--etzel-gold-dark); font-weight: 700; text-decoration: none; }
+  .empty-state-main a:hover { text-decoration: underline; }
 
   .site-footer {
     margin-top: 40px; background: var(--etzel-gold); color: #2c2c1a; text-align: center;
@@ -146,7 +151,13 @@ async function loadEvents() {
   const events = eventsSnap.docs.filter(d => d.data().active !== false);
 
   if (events.length === 0) {
-    container.innerHTML = '<div class="empty-state">אין כרגע אירועים פתוחים להרשמה.</div>';
+    container.innerHTML = `
+      <div class="empty-state empty-state-main">
+        <svg class="icon-lg" viewBox="0 0 24 24"><path d="M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7zm12 8v10H5V10h14z"/></svg>
+        <p>אין כרגע אירועים פתוחים להרשמה.</p>
+        <p>לפרטים על סיורים ואירועים קרובים אפשר להתקשר ל-<a href="tel:035284001">03-528-4001</a>.</p>
+      </div>
+    `;
     return;
   }
 
