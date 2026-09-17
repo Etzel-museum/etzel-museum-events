@@ -1,0 +1,9 @@
+{
+  "name": "etzel-events-scraper",
+  "private": true,
+  "type": "commonjs",
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "firebase-admin": "^12.6.0"
+  }
+}
