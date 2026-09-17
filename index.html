@@ -6,55 +6,53 @@
 <title>אירועי מוזיאון האצ"ל</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root {
-    --etzel-blue: #0e1b2e; --etzel-gold: #b8874e;
-    --bg: #f4f1ec; --card-bg: #fff; --text: #222; --muted: #666; --danger: #a4332c;
+    --etzel-blue: #1f1f1f; --etzel-gold: #b9b83a; --etzel-gold-dark: #999822;
+    --bg: #f7f7f4; --card-bg: #fff; --text: #212529; --muted: #666; --danger: #a4332c;
   }
   * { box-sizing: border-box; }
-  body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; margin: 0; background: var(--bg); color: var(--text); }
-  .hero h1, .event-card h2 { font-family: 'Frank Ruhl Libre', Georgia, serif; }
+  body { font-family: 'Assistant', Tahoma, Arial, sans-serif; margin: 0; background: var(--bg); color: var(--text); }
+  .hero h1, .event-card h2 { font-family: 'Assistant', Tahoma, Arial, sans-serif; font-weight: 800; }
   .icon { width: 16px; height: 16px; vertical-align: -3px; margin-inline-end: 5px; fill: currentColor; flex-shrink: 0; }
   .hp-field { position: absolute; left: -9999px; top: -9999px; height: 0; width: 0; overflow: hidden; }
 
   .hero {
-    position: relative; padding: 70px 20px 60px; text-align: center; color: #fff;
-    background: linear-gradient(rgba(14,27,46,0.82), rgba(14,27,46,0.9)), url('background.jpg');
-    background-size: cover; background-position: center;
+    position: relative; padding: 18px 20px; text-align: center; color: #fff;
+    background: var(--etzel-gold); border-bottom: 5px solid var(--etzel-blue);
   }
-  .hero h1 { margin: 0 0 8px; font-size: 2em; letter-spacing: 0.5px; }
-  .hero p { margin: 0; color: #e7d6bd; font-size: 1.05em; }
-  .hero::after { content: ""; position: absolute; bottom: 0; right: 0; left: 0; height: 4px; background: var(--etzel-gold); }
+  .hero-inner { max-width: 760px; margin: 0 auto; }
+  .hero-logo { height: 58px; }
+  .hero p { margin: 6px 0 0; color: #2c2c1a; font-size: 0.92em; font-weight: 600; }
 
   main { max-width: 760px; margin: 0 auto; padding: 32px 16px 60px; }
 
-  @keyframes fadeInUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
-  .event-card { background: var(--card-bg); border-radius: 14px; box-shadow: 0 4px 18px rgba(14,27,46,0.12); overflow: hidden; margin-bottom: 30px; animation: fadeInUp 0.5s ease-out backwards; }
+  @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  .event-card { background: var(--card-bg); border: 1px solid #e4e0d3; border-top: 4px solid var(--etzel-gold); margin-bottom: 28px; animation: fadeInUp 0.4s ease-out backwards; }
   .event-image { width: 100%; max-height: 340px; object-fit: contain; display: block; background: #e5ded0; }
   .event-body { padding: 22px 24px 24px; }
   .event-card h2 { margin: 0 0 8px; color: var(--etzel-blue); font-size: 1.4em; }
   .event-desc { color: var(--muted); margin-bottom: 18px; white-space: pre-line; line-height: 1.5; }
 
   .session-row {
-    background: #faf8f3; border-radius: 10px; padding: 16px 18px; margin-top: 14px;
-    border-inline-start: 3px solid var(--etzel-gold);
+    border-top: 1px solid #e4e0d3; padding: 16px 2px; margin-top: 4px;
     display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
   }
   .session-info b { display: block; color: var(--etzel-blue); font-size: 1.05em; }
   .session-info span { color: var(--muted); font-size: 0.9em; }
-  .spots-left { font-weight: bold; color: var(--etzel-gold); }
+  .spots-left { font-weight: bold; color: var(--etzel-gold-dark); }
   .spots-left.low { color: var(--danger); }
 
-  button { font-family: inherit; cursor: pointer; border: none; border-radius: 24px; padding: 10px 22px; font-size: 0.95em; transition: 0.15s; }
-  .btn-primary { background: var(--etzel-gold); color: #fff; font-weight: 600; }
-  .btn-primary:hover { background: var(--etzel-blue); }
+  button { font-family: inherit; cursor: pointer; border: none; border-radius: 3px; padding: 10px 22px; font-size: 0.95em; transition: 0.15s; }
+  .btn-primary { background: var(--etzel-gold); color: #23230f; font-weight: 700; }
+  .btn-primary:hover { background: var(--etzel-blue); color: #fff; }
   .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
 
   .reg-form, .cancel-form { display: none; margin-top: 16px; padding-top: 16px; border-top: 1px dashed #ddd; width: 100%; }
   .reg-form.open, .cancel-form.open { display: block; }
   .reg-form label, .cancel-form label { display: block; font-size: 0.9em; margin: 10px 0 4px; color: var(--muted); }
-  .reg-form input, .cancel-form input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 1em; font-family: inherit; }
+  .reg-form input, .cancel-form input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 3px; font-size: 1em; font-family: inherit; }
   .reg-form input:focus, .cancel-form input:focus { outline: none; border-color: var(--etzel-gold); }
   .reg-form .actions, .cancel-form .actions, .waitlist-form .actions { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 10px; }
 
@@ -62,33 +60,39 @@
   .btn-link:hover { color: var(--etzel-blue); }
   .session-actions { display: flex; align-items: center; gap: 10px; }
 
-  .msg { margin-top: 10px; font-size: 0.9em; padding: 8px 10px; border-radius: 6px; }
+  .msg { margin-top: 10px; font-size: 0.9em; padding: 8px 10px; border-radius: 3px; }
   .msg.error { background: #fdecea; color: var(--danger); }
   .msg.success { background: #eaf3e3; color: #3f6b2c; }
 
   .empty-state { text-align: center; color: var(--muted); padding: 60px 20px; }
-  footer { text-align: center; color: var(--muted); font-size: 0.85em; padding: 20px; }
 
-  .skeleton-card { background: var(--card-bg); border-radius: 14px; overflow: hidden; margin-bottom: 30px; box-shadow: 0 4px 18px rgba(14,27,46,0.08); }
+  .site-footer {
+    margin-top: 40px; background: var(--etzel-gold); color: #2c2c1a; text-align: center;
+    padding: 34px 20px 38px; border-top: 5px solid var(--etzel-blue);
+  }
+  .footer-logo { height: 70px; margin-bottom: 14px; }
+  .footer-details { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; font-weight: 600; font-size: 0.92em; }
+
+  .skeleton-card { background: var(--card-bg); border: 1px solid #e4e0d3; overflow: hidden; margin-bottom: 28px; }
   .skeleton-block { background: linear-gradient(90deg, #ece7dd 25%, #f6f3ec 50%, #ece7dd 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
   @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
   .skeleton-image { height: 200px; }
-  .skeleton-line { height: 16px; margin: 18px 24px; border-radius: 4px; }
+  .skeleton-line { height: 16px; margin: 18px 24px; }
   .skeleton-line.short { width: 40%; }
 
   .event-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-  .btn-share { background: none; border: 1px solid #ddd; color: var(--muted); border-radius: 50%; width: 36px; height: 36px; padding: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .btn-share:hover { border-color: var(--etzel-gold); color: var(--etzel-gold); }
-  .share-toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--etzel-blue); color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 0.9em; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 10; }
+  .btn-share { background: none; border: 1px solid #ccc; color: var(--muted); border-radius: 3px; width: 34px; height: 34px; padding: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .btn-share:hover { border-color: var(--etzel-gold-dark); color: var(--etzel-gold-dark); }
+  .share-toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--etzel-blue); color: #fff; padding: 10px 20px; border-radius: 3px; font-size: 0.9em; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 10; }
   .share-toast.show { opacity: 1; }
 
   .waitlist-form { display: none; margin-top: 16px; padding-top: 16px; border-top: 1px dashed #ddd; width: 100%; }
   .waitlist-form.open { display: block; }
   .waitlist-form label { display: block; font-size: 0.9em; margin: 10px 0 4px; color: var(--muted); }
-  .waitlist-form input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 1em; font-family: inherit; }
+  .waitlist-form input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 3px; font-size: 1em; font-family: inherit; }
   .waitlist-form .actions { margin-top: 14px; display: flex; gap: 10px; }
-  .btn-outline { background: none; border: 2px solid var(--etzel-gold); color: var(--etzel-gold); font-weight: 600; }
-  .btn-outline:hover { background: var(--etzel-gold); color: #fff; }
+  .btn-outline { background: none; border: 2px solid var(--etzel-gold-dark); color: var(--etzel-gold-dark); font-weight: 700; }
+  .btn-outline:hover { background: var(--etzel-gold); color: #23230f; }
 
   .ended-events { margin-top: 10px; }
   .ended-events summary { cursor: pointer; color: var(--muted); font-size: 0.95em; padding: 10px 0; }
@@ -99,8 +103,10 @@
 <body>
 
 <div class="hero">
-  <h1>מוזיאון האצ"ל</h1>
-  <p>המלך ג'ורג' 38, תל אביב-יפו, 6329802 · טלפון: 03-528-4001</p>
+  <div class="hero-inner">
+    <img class="hero-logo" src="site-contact-logo.png" alt="מוזיאון האצ״ל">
+    <p>הרשמה לאירועים ולסיורים</p>
+  </div>
 </div>
 
 <main id="eventsContainer">
@@ -110,7 +116,13 @@
 
 <div class="share-toast" id="shareToast">הקישור הועתק!</div>
 
-<footer>מוזיאון האצ"ל</footer>
+<footer class="site-footer">
+  <img class="footer-logo" src="site-contact-logo.png" alt="מוזיאון האצ״ל">
+  <div class="footer-details">
+    <span>המלך ג'ורג' 38, תל אביב-יפו</span>
+    <span>03-528-4001</span>
+  </div>
+</footer>
 
 <script type="module">
 import { db } from './firebase-init.js';
