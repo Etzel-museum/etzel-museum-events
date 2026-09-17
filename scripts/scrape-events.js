@@ -1,11 +1,16 @@
-// Scrapes the museum's official events list (museums.mod.gov.il) and drafts
+// Pulls the museum's official events (museums.mod.gov.il) and drafts
 // matching events/sessions into our own Firestore, via the Admin SDK
 // (runs only inside the GitHub Action - never in the browser).
 //
+// The events aren't in the page's HTML at all - the page loads them
+// client-side from a plain JSON endpoint (found by inspecting the page's
+// own network requests). That endpoint is what we call directly; no HTML
+// parsing, no headless browser, no CSS-class fragility.
+//
 // Design notes:
-// - Groups scraped cards by title, since the source site lists the same
-//   event once per date (each with its own time(s)) rather than once with
-//   multiple sessions - we fold those back into one event with N sessions.
+// - Groups items by title, since the source lists the same event once per
+//   date (each with its own time(s)) rather than once with multiple
+//   sessions - we fold those back into one event with N sessions.
 // - Never touches an existing session's capacity/registeredCount - those
 //   are either admin-set or real registration data, not ours to overwrite.
 // - Only marks a NEW event active if title/description/image/location/at
@@ -13,11 +18,11 @@
 //   (active: false) for the admin to review.
 // - Also self-heals registeredCount by recounting real registrations, to
 //   bound the damage window of any client-side counter tampering.
-const cheerio = require('cheerio');
 const admin = require('firebase-admin');
 const fs = require('fs');
 
-const SOURCE_URL = 'https://museums.mod.gov.il/sites/Etzel/Events/Pages/Eventslist.aspx';
+const SITE_BASE = 'https://museums.mod.gov.il';
+const EVENTS_API_URL = `${SITE_BASE}/modService/ListController/GetModItems?webUrl=${encodeURIComponent(SITE_BASE)}&listName=${encodeURIComponent('אירועים')}&viewName=EtzelEvents`;
 const CLOUDINARY_CLOUD_NAME = 'qtdjlxjs';
 const CLOUDINARY_UPLOAD_PRESET = 'קלודקוד';
 const DEFAULT_CAPACITY = 50;
@@ -29,14 +34,6 @@ function hashString(str) {
     h = Math.imul(h, 0x01000193);
   }
   return (h >>> 0).toString(16);
-}
-
-function parseHebrewDate(dateStr) {
-  const m = (dateStr || '').trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/);
-  if (!m) return null;
-  let [, d, mo, y] = m;
-  if (y.length === 2) y = '20' + y;
-  return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
 }
 
 function parseTimes(timeStr) {
@@ -59,29 +56,22 @@ async function uploadImageToCloudinary(imageUrl) {
   return data.secure_url;
 }
 
-function scrapeCards(html) {
-  const $ = cheerio.load(html);
-  const cards = [];
-  $('.specificMuseumEvent').each((_, el) => {
-    const $el = $(el);
-    const title = $el.find('.specificMuseumEventTitle').first().text().trim();
-    const summary = $el.find('.specificMuseumEventSummary').first().text().trim();
-    let imageSrc = $el.find('.specificMuseumEventImg').first().attr('src') || '';
-    if (imageSrc && !/^https?:\/\//.test(imageSrc)) {
-      imageSrc = new URL(imageSrc, SOURCE_URL).href;
-    }
-    let dateStr = '', timeStr = '', location = '';
-    $el.find('.specificMuseumEventTimeAndLocation').each((__, row) => {
-      const $row = $(row);
-      const text = $row.find('span').first().text().trim();
-      if ($row.find('.fa-calendar-alt').length) dateStr = text;
-      else if ($row.find('.fa-clock').length) timeStr = text;
-      else if ($row.find('.fa-map-marker-alt').length) location = text;
-    });
-    if (!title) return;
-    cards.push({ title, summary, imageSrc, dateStr, timeStr, location });
-  });
-  return cards;
+async function fetchCards() {
+  const res = await fetch(EVENTS_API_URL);
+  if (!res.ok) throw new Error(`events API fetch failed: ${res.status}`);
+  const outer = await res.json();
+  const items = typeof outer === 'string' ? JSON.parse(outer) : outer;
+
+  return items.map(it => {
+    const title = (it.LinkTitle || '').trim();
+    const summary = (it.MuseumEventInfo || '').trim();
+    const location = (it.MuseumEventLocation || '').trim();
+    let imageSrc = it.MuseumEventImg_Url || '';
+    if (imageSrc && !/^https?:\/\//.test(imageSrc)) imageSrc = new URL(imageSrc, SITE_BASE).href;
+    const dateStr = (it.MuseumEventStartDate || '').slice(0, 10); // already YYYY-MM-DD
+    const timeStr = it.MuseumEventStartHour || '';
+    return { title, summary, imageSrc, dateStr, timeStr, location };
+  }).filter(c => c.title);
 }
 
 async function main() {
@@ -90,10 +80,7 @@ async function main() {
   });
   const db = admin.firestore();
 
-  const res = await fetch(SOURCE_URL);
-  if (!res.ok) throw new Error(`source page fetch failed: ${res.status}`);
-  const html = await res.text();
-  const cards = scrapeCards(html);
+  const cards = await fetchCards();
 
   const groups = new Map();
   for (const card of cards) {
@@ -110,7 +97,7 @@ async function main() {
 
     const sessions = [];
     for (const card of group) {
-      const date = parseHebrewDate(card.dateStr);
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(card.dateStr) ? card.dateStr : null;
       const times = parseTimes(card.timeStr);
       if (!date || times.length === 0) continue;
       for (const time of times) sessions.push({ date, time, dateTime: `${date}T${time}` });
