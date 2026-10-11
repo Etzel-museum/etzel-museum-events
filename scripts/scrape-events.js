@@ -22,7 +22,12 @@ const admin = require('firebase-admin');
 const fs = require('fs');
 
 const SITE_BASE = 'https://museums.mod.gov.il';
-const EVENTS_API_URL = `${SITE_BASE}/modService/ListController/GetModItems?webUrl=${encodeURIComponent(SITE_BASE)}&listName=${encodeURIComponent('אירועים')}&viewName=EtzelEvents`;
+// The per-museum views (viewName=EtzelEvents) return HTTP 500 whenever the
+// view has no upcoming events, which broke this job once the last event
+// passed. The unfiltered list always answers, so we pull it all and filter
+// by museum name + future date ourselves.
+const EVENTS_API_URL = `${SITE_BASE}/modService/ListController/GetModItems?webUrl=${encodeURIComponent(SITE_BASE)}&listName=${encodeURIComponent('אירועים')}&viewName=`;
+const MUSEUM_NAME = 'מוזיאון האצ"ל';
 const CLOUDINARY_CLOUD_NAME = 'qtdjlxjs';
 const CLOUDINARY_UPLOAD_PRESET = 'קלודקוד';
 const DEFAULT_CAPACITY = 50;
@@ -62,7 +67,13 @@ async function fetchCards() {
   const outer = await res.json();
   const items = typeof outer === 'string' ? JSON.parse(outer) : outer;
 
-  return items.map(it => {
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+  const upcoming = items.filter(it =>
+    (it.MuseumEventName || '').trim() === MUSEUM_NAME &&
+    (it.MuseumEventStartDate || '').slice(0, 10) >= today
+  );
+
+  return upcoming.map(it => {
     const title = (it.LinkTitle || '').trim();
     const summary = (it.MuseumEventInfo || '').trim();
     const location = (it.MuseumEventLocation || '').trim();
